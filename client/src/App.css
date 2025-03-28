@@ -1,0 +1,21 @@
+.App {
+  text-align: center;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: white;
+}
+
+.game-title {
+  font-size: 3rem;
+  color: #5183f5;
+  text-shadow: 0 0 10px rgba(81, 131, 245, 0.5);
+  margin-bottom: 2rem;
+  font-weight: bold;
+}
+
+.game-subtitle {
+  font-size: 1.2rem;
+  color: #a5b9f8;
+  margin-bottom: 2rem;
+}
