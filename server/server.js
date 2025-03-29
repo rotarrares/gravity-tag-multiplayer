@@ -47,7 +47,7 @@ const io = new Server(server, {
 });
 
 // Initialize game manager
-const gameManager = new GameManager();
+const gameManager = new GameManager(io);
 
 // Function to generate a 4-character room code
 function generateRoomCode() {
@@ -58,6 +58,11 @@ function generateRoomCode() {
   }
   return result;
 }
+
+// Add event emitter for tagging events
+gameManager.setEventEmitter((roomId, eventName, data) => {
+  io.to(roomId).emit(eventName, data);
+});
 
 // Set up regular game state updates
 setInterval(() => {
@@ -140,6 +145,26 @@ io.on('connection', (socket) => {
         id: socket.id, 
         username: username 
       });
+      
+      // Randomly tag a player at the start if nobody is tagged yet
+      const room = gameManager.rooms[targetRoomId];
+      const players = Object.values(room.players);
+      
+      // If there's at least 2 players and nobody is tagged, randomly tag someone
+      const anyoneTagged = players.some(p => p.isTagged);
+      if (players.length >= 2 && !anyoneTagged) {
+        const randomPlayer = players[Math.floor(Math.random() * players.length)];
+        randomPlayer.isTagged = true;
+        randomPlayer.lastTaggedTime = Date.now();
+        
+        console.log(`Randomly tagged player ${randomPlayer.username || randomPlayer.id} to start the game`);
+        
+        // Notify room of initial tag
+        io.to(targetRoomId).emit('playerTagged', {
+          taggedId: randomPlayer.id,
+          timestamp: Date.now()
+        });
+      }
     } catch (error) {
       console.error(`Error joining game: ${error.message}`);
       socket.emit('error', { message: 'Failed to join game. Please try again.' });
