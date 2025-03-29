@@ -99,48 +99,6 @@ class GameManager {
     return false;
   }
 
-  // Handle player tagging
-  handleTagging(room) {
-    const now = Date.now();
-    const players = Object.values(room.players);
-    
-    for (const player of players) {
-      // Skip tagged players or those with invulnerability
-      if (player.isTagged || now - player.lastTaggedTime < GAME_CONSTANTS.TAG_INVULNERABILITY) {
-        continue;
-      }
-      
-      for (const otherPlayer of players) {
-        // Skip self or tagged players
-        if (player.id === otherPlayer.id || otherPlayer.isTagged) {
-          continue;
-        }
-        
-        const dist = Physics.distance(player.x, player.y, otherPlayer.x, otherPlayer.y);
-        
-        // Check if in tagging range
-        if (dist <= GAME_CONSTANTS.TAG_RADIUS) {
-          // Tag the player
-          player.isTagged = true;
-          player.lastTaggedTime = now;
-          player.score -= GAME_CONSTANTS.TAGGED_POINTS_LOST;
-          otherPlayer.score += GAME_CONSTANTS.TAG_POINTS;
-          break;
-        }
-      }
-    }
-    
-    // Check if only one player is untagged
-    const untaggedPlayers = players.filter(p => !p.isTagged);
-    if (untaggedPlayers.length === 1 && players.length > 1) {
-      const lastUntagged = untaggedPlayers[0];
-      if (!lastUntagged.wasLastUntagged) {
-        lastUntagged.wasLastUntagged = true;
-        lastUntagged.score += 10; // Bonus for being last untagged
-      }
-    }
-  }
-  
   // Handle energy regeneration
   regenerateEnergy(room) {
     for (const player of Object.values(room.players)) {
@@ -173,7 +131,7 @@ class GameManager {
       HazardManager.updateComets(room);
       
       // Handle game mechanics
-      this.handleTagging(room);
+      Physics.handleTagging(room);
       this.regenerateEnergy(room);
       
       // Stronger gravity during storm for more dramatic effects
