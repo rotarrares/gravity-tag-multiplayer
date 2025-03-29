@@ -16,7 +16,7 @@ const GAME_CONSTANTS = {
   PULSE_COOLDOWN: 10000, // ms
   PULSE_ENERGY_COST: 20,
   COLLAPSE_STRENGTH_MULTIPLIER: 25, // Increased from 15 to 25
-  COLLAPSE_DURATION: 3000, // ms
+  COLLAPSE_DURATION: 5000, // ms - Increased from 3000 to 5000 for more visible effect
   COLLAPSE_COOLDOWN: 30000, // ms
   COLLAPSE_ENERGY_COST: 50,
   
