@@ -2,11 +2,13 @@ const { GAME_CONSTANTS } = require('./constants');
 const Physics = require('./physics');
 const HazardManager = require('./hazards');
 const { createDistributedHazards } = require('./entities');
+const SpatialGrid = require('./physics/spatial');
 
 // Game manager handles all game logic
 class GameManager {
   constructor() {
     this.rooms = {};
+    this.roomStates = {}; // For delta compression
   }
   
   // Create a new game room
@@ -16,7 +18,15 @@ class GameManager {
       hazards: [],
       startTime: Date.now(),
       timeRemaining: GAME_CONSTANTS.ROUND_DURATION,
-      lastCometSpawn: 0
+      lastCometSpawn: 0,
+      // Add spatial grid for optimized physics
+      spatialGrid: new SpatialGrid(300)
+    };
+    
+    // Initialize the previous state for delta compression
+    this.roomStates[roomId] = {
+      players: {},
+      hazards: []
     };
     
     // Add initial hazards (now using the distributed function)
@@ -40,6 +50,14 @@ class GameManager {
   addPlayerToRoom(roomId, player) {
     if (this.rooms[roomId]) {
       this.rooms[roomId].players[player.id] = player;
+      
+      // Add to state tracking for delta compression
+      this.roomStates[roomId].players[player.id] = {
+        x: player.x,
+        y: player.y,
+        isTagged: player.isTagged,
+        score: player.score
+      };
     }
   }
   
@@ -47,6 +65,11 @@ class GameManager {
   removePlayerFromRoom(roomId, playerId) {
     if (this.rooms[roomId] && this.rooms[roomId].players[playerId]) {
       delete this.rooms[roomId].players[playerId];
+      
+      // Clean up state tracking
+      if (this.roomStates[roomId]?.players[playerId]) {
+        delete this.roomStates[roomId].players[playerId];
+      }
     }
   }
   
@@ -111,13 +134,55 @@ class GameManager {
 
   // Handle energy regeneration
   regenerateEnergy(room) {
+    // Constant for energy regen - precomputed
+    const energyRegen = GAME_CONSTANTS.ENERGY_REGEN_RATE * (GAME_CONSTANTS.TICK_RATE / 1000);
+    const maxEnergy = GAME_CONSTANTS.MAX_ENERGY;
+    
     for (const player of Object.values(room.players)) {
-      // Regenerate energy over time
-      player.energy = Math.min(
-        GAME_CONSTANTS.MAX_ENERGY,
-        player.energy + GAME_CONSTANTS.ENERGY_REGEN_RATE * (GAME_CONSTANTS.TICK_RATE / 1000)
-      );
+      // Fast min operation for energy capping
+      player.energy = player.energy + energyRegen;
+      if (player.energy > maxEnergy) player.energy = maxEnergy;
     }
+  }
+  
+  // Generate delta state for efficient network updates
+  generateDeltaState(roomId) {
+    const room = this.rooms[roomId];
+    const previousState = this.roomStates[roomId];
+    const delta = {
+      players: {},
+      hazards: [],
+      timeRemaining: room.timeRemaining
+    };
+    
+    // Calculate player deltas
+    for (const [playerId, player] of Object.entries(room.players)) {
+      const prevPlayer = previousState.players[playerId];
+      
+      // Only include changed properties
+      if (!prevPlayer || 
+          prevPlayer.x !== player.x || 
+          prevPlayer.y !== player.y || 
+          prevPlayer.isTagged !== player.isTagged ||
+          prevPlayer.score !== player.score) {
+        
+        delta.players[playerId] = {
+          x: player.x,
+          y: player.y,
+          isTagged: player.isTagged,
+          score: player.score
+        };
+        
+        // Update previous state
+        previousState.players[playerId] = {...delta.players[playerId]};
+      }
+    }
+    
+    // For hazards, just include the entire array for simplicity
+    // In a future update, we could apply delta compression to hazards too
+    delta.hazards = room.hazards;
+    
+    return delta;
   }
   
   // Main update loop for all game rooms
@@ -131,6 +196,13 @@ class GameManager {
       
       // Check for gravity storm (final 30 seconds)
       const inGravityStorm = room.timeRemaining <= GAME_CONSTANTS.GRAVITY_STORM_DURATION;
+      
+      // Update the spatial grid with all current objects
+      const allObjects = [
+        ...Object.values(room.players),
+        ...room.hazards
+      ];
+      room.spatialGrid.update(allObjects);
       
       // Apply physics
       Physics.applyMovement(room);
@@ -148,7 +220,7 @@ class GameManager {
       // Stronger gravity during storm for more dramatic effects
       if (inGravityStorm) {
         for (const player of Object.values(room.players)) {
-          player.gravityStrength *= 4; // Increased from 3 to 4 for more dramatic storm effect
+          player.gravityStrength *= 4;
         }
       }
       
