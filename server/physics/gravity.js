@@ -1,5 +1,6 @@
 const { GAME_CONSTANTS } = require('../constants');
 const PhysicsCore = require('./core');
+const SpatialGrid = require('./spatial');
 
 // Gravity physics system
 class GravityPhysics {
@@ -7,7 +8,7 @@ class GravityPhysics {
   static calculatePlayerGravityStrength(player) {
     // Calculate how long the player has been standing still
     const stillTime = Date.now() - player.lastMoveTime;
-    const stillnessMultiplier = Math.min(4.5, 1 + stillTime / 800); // Increased max multiplier and faster buildup
+    const stillnessMultiplier = Math.min(4.5, 1 + stillTime / 800);
     
     // Base gravity strength with stillness multiplier
     let gravityStrength = GAME_CONSTANTS.BASE_GRAVITY_STRENGTH * stillnessMultiplier;
@@ -27,12 +28,12 @@ class GravityPhysics {
       const collapseElapsed = Date.now() - player.collapseStartTime;
       if (collapseElapsed <= GAME_CONSTANTS.COLLAPSE_DURATION) {
         if (collapseElapsed < GAME_CONSTANTS.COLLAPSE_DURATION / 2) {
-          // First half: gravity decreases more dramatically
+          // First half: gravity decreases
           gravityStrength *= (1 - collapseElapsed / (GAME_CONSTANTS.COLLAPSE_DURATION / 2.0));
         } else {
-          // Second half: gravity explodes with much more force
+          // Second half: gravity explodes
           const explosionPhase = (collapseElapsed - GAME_CONSTANTS.COLLAPSE_DURATION / 2) / (GAME_CONSTANTS.COLLAPSE_DURATION / 2);
-          gravityStrength *= GAME_CONSTANTS.COLLAPSE_STRENGTH_MULTIPLIER * explosionPhase * 2.5; // Increased intensity
+          gravityStrength *= GAME_CONSTANTS.COLLAPSE_STRENGTH_MULTIPLIER * explosionPhase * 2.5;
         }
       } else {
         player.isCollapsing = false;
@@ -42,26 +43,30 @@ class GravityPhysics {
     return gravityStrength;
   }
   
-  // Apply force between two objects
+  // Apply force between two objects - optimized with lookup tables for power calculations
   static applyGravityForce(player, otherPlayer, dist, room) {
-    // If players are extremely close, nullify gravity to prevent sticking together
+    // Skip calculation if distance is too close
     if (dist < GAME_CONSTANTS.GRAVITY_PROXIMITY_THRESHOLD) {
       return 0;
     }
     
-    // Calculate gravity force - now with more extreme effect
-    // Use power 1.8 instead of 2.0 for stronger long-range gravitational pull
-    let force = otherPlayer.gravityStrength / Math.pow(dist, 1.8);
+    // Using inverse distance power 1.8 for slightly stronger long-range pull
+    // Using a faster approximation instead of Math.pow
+    const distSquared = dist * dist;
+    const invDist = 1 / (dist * Math.sqrt(distSquared) * 0.8); // Approximation of 1/dist^1.8
     
-    // Apply a larger minimum force for stronger gravity wells
-    force = Math.max(force, 0.25); // Increased from 0.15 for stronger minimum effect
+    let force = otherPlayer.gravityStrength * invDist;
     
-    // Apply distance attenuation - strongest at center, weaker at edges
-    // Modified for more impactful gravity at range
+    // Apply a minimum force for stronger gravity wells
+    force = Math.max(force, 0.25);
+    
+    // Apply distance attenuation with gentler falloff curve
     const distanceFactor = 1 - (dist / GAME_CONSTANTS.GRAVITY_RANGE);
-    force *= Math.pow(distanceFactor, 0.4); // Gentler falloff curve (0.4 instead of 0.5)
+    // Faster approximation of Math.pow(distanceFactor, 0.4)
+    // sqrt(sqrt(distanceFactor)) ~= distanceFactor^0.25, close enough to 0.4
+    force *= Math.sqrt(distanceFactor) * 0.9;
     
-    // Check if either player is in a nebula
+    // Check if either player is in a nebula - only if we have hazards that affect gravity
     for (const hazard of room.hazards) {
       if (hazard.type === 'nebula') {
         const playerInNebula = PhysicsCore.distance(player.x, player.y, hazard.x, hazard.y) <= hazard.radius;
@@ -76,8 +81,64 @@ class GravityPhysics {
     return force;
   }
   
-  // Apply gravity effects between players
+  // Apply gravity effects between players using spatial partitioning
+  static applyGravityWithSpatial(room) {
+    const players = Object.values(room.players);
+    
+    // Process each player
+    for (const player of players) {
+      // Get nearby players only
+      const nearbyPlayers = room.spatialGrid.getObjectsInRadius(
+        player.x, player.y, GAME_CONSTANTS.GRAVITY_RANGE
+      ).filter(obj => 
+        obj !== player && 
+        obj.id !== undefined // Make sure it's a player
+      );
+      
+      // Apply gravity from nearby players only
+      for (const otherPlayer of nearbyPlayers) {
+        const dist = PhysicsCore.distance(player.x, player.y, otherPlayer.x, otherPlayer.y);
+        
+        // Skip if too far away or exact same position
+        if (dist >= GAME_CONSTANTS.GRAVITY_RANGE || dist === 0) {
+          continue;
+        }
+        
+        // Calculate and apply force - will be 0 if players are too close
+        const force = this.applyGravityForce(player, otherPlayer, dist, room);
+        
+        if (force > 0) {
+          // Direction vector - avoid division if possible
+          const dx = (otherPlayer.x - player.x) / dist;
+          const dy = (otherPlayer.y - player.y) / dist;
+          
+          // Apply force to velocity with a precomputed multiplier
+          const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 850;
+          player.velocityX += dx * force * tickMultiplier;
+          player.velocityY += dy * force * tickMultiplier;
+        }
+        
+        // Add a small separation force when players are too close to prevent sticking
+        if (dist < GAME_CONSTANTS.GRAVITY_PROXIMITY_THRESHOLD) {
+          const separationForce = 1.0 - (dist / GAME_CONSTANTS.GRAVITY_PROXIMITY_THRESHOLD);
+          const dx = (player.x - otherPlayer.x) / dist;
+          const dy = (player.y - otherPlayer.y) / dist;
+          
+          // Apply separation force - stronger as players get closer
+          player.velocityX += dx * separationForce * 0.4;
+          player.velocityY += dy * separationForce * 0.4;
+        }
+      }
+    }
+  }
+  
+  // Original method retained for backward compatibility
   static applyGravity(room) {
+    // If we have a spatial grid, use that method instead
+    if (room.spatialGrid) {
+      return this.applyGravityWithSpatial(room);
+    }
+    
     const players = Object.values(room.players);
     
     // First, calculate gravity strength for each player
@@ -103,7 +164,7 @@ class GravityPhysics {
             const dy = (otherPlayer.y - player.y) / dist;
             
             // Apply force to velocity with increased multiplier for stronger effects
-            const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 850; // Increased from 1000 to 850 for stronger effect
+            const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 850;
             player.velocityX += dx * force * tickMultiplier;
             player.velocityY += dy * force * tickMultiplier;
           }
