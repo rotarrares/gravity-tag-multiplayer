@@ -65,18 +65,32 @@ setInterval(() => {
   
   // Broadcast game state to all clients using delta compression
   Object.entries(gameManager.rooms).forEach(([roomId, room]) => {
-    // Generate delta state for more efficient updates
-    const deltaState = gameManager.generateDeltaState(roomId);
-    
-    // Only emit if there are actual changes to send
-    if (Object.keys(deltaState.players).length > 0 || deltaState.hazards.length > 0) {
-      io.to(roomId).emit('gameState', deltaState);
+    try {
+      // Every 10th update (or about 0.5 seconds), send full state to ensure consistency
+      const now = Date.now();
+      const shouldSendFullState = now % 500 < GAME_CONSTANTS.TICK_RATE;
+      
+      if (shouldSendFullState) {
+        // Send full state occasionally to ensure clients are synced
+        const fullState = gameManager.generateFullState(roomId);
+        io.to(roomId).emit('gameState', fullState);
+      } else {
+        // Generate delta state for more efficient updates
+        const deltaState = gameManager.generateDeltaState(roomId);
+        
+        // Only emit if there are actual changes to send
+        if (Object.keys(deltaState.players).length > 0 || deltaState.hazards.length > 0) {
+          io.to(roomId).emit('gameState', deltaState);
+        }
+      }
+      
+      // Always send time remaining as it's always changing
+      io.to(roomId).emit('timeUpdate', {
+        timeRemaining: room.timeRemaining
+      });
+    } catch (error) {
+      console.error(`Error broadcasting to room ${roomId}:`, error);
     }
-    
-    // Always send time remaining as it's always changing
-    io.to(roomId).emit('timeUpdate', {
-      timeRemaining: room.timeRemaining
-    });
   });
 }, GAME_CONSTANTS.TICK_RATE);
 
@@ -127,6 +141,10 @@ io.on('connection', (socket) => {
         gameConstants: GAME_CONSTANTS
       });
       
+      // Send initial full game state to the joining player
+      const fullState = gameManager.generateFullState(targetRoomId);
+      socket.emit('gameState', fullState);
+      
       // Notify room of new player
       io.to(targetRoomId).emit('playerJoined', { 
         id: socket.id, 
@@ -162,6 +180,10 @@ io.on('connection', (socket) => {
         playerId: socket.id,
         gameConstants: GAME_CONSTANTS
       });
+      
+      // Send current game state
+      const fullState = gameManager.generateFullState(roomId);
+      socket.emit('gameState', fullState);
     } else {
       console.log('Room not found, sending only game constants');
       socket.emit('gameConstants', GAME_CONSTANTS);
@@ -192,17 +214,39 @@ io.on('connection', (socket) => {
   // Player gravity pulse
   socket.on('gravityPulse', ({ roomId }) => {
     if (gameManager.rooms[roomId]) {
-      gameManager.triggerPlayerPulse(roomId, socket.id);
-      io.to(roomId).emit('pulseTriggered', { playerId: socket.id });
+      const success = gameManager.triggerPlayerPulse(roomId, socket.id);
+      if (success) {
+        // Make sure to broadcast this to all players immediately
+        io.to(roomId).emit('pulseTriggered', { playerId: socket.id });
+        
+        // Also send an immediate gameState update to ensure the client sees the change
+        const player = gameManager.rooms[roomId].players[socket.id];
+        io.to(roomId).emit('playerPulsing', { 
+          playerId: socket.id, 
+          isPulsing: true,
+          energy: player.energy
+        });
+      }
     }
   });
   
   // Player collapse (special move)
   socket.on('gravityCollapse', ({ roomId }) => {
+    console.log(`Player ${socket.id} triggered collapse in room ${roomId}`);
     if (gameManager.rooms[roomId]) {
       const success = gameManager.triggerPlayerCollapse(roomId, socket.id);
+      console.log(`Collapse success: ${success}`);
       if (success) {
+        // Make sure to broadcast this to all players immediately
         io.to(roomId).emit('collapseTriggered', { playerId: socket.id });
+        
+        // Also send an immediate gameState update to ensure the client sees the change
+        const player = gameManager.rooms[roomId].players[socket.id];
+        io.to(roomId).emit('playerCollapsing', { 
+          playerId: socket.id, 
+          isCollapsing: true,
+          energy: player.energy
+        });
       }
     }
   });
