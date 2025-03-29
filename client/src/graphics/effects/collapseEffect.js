@@ -8,6 +8,7 @@ import { easeInOutQuad, easeInQuad, easeOutQuad } from '../utils/mathUtils';
  * @param {number} radius - Radius (will be forced positive)
  */
 const safeArc = (ctx, x, y, radius) => {
+  if (!ctx || typeof ctx.arc !== 'function') return;
   const safeRadius = Math.max(0.001, radius);
   ctx.arc(x, y, safeRadius, 0, Math.PI * 2);
 };
@@ -21,12 +22,23 @@ const safeArc = (ctx, x, y, radius) => {
  * @param {number} x1 - End X
  * @param {number} y1 - End Y
  * @param {number} r1 - End radius
- * @returns {CanvasGradient} The gradient object
+ * @returns {CanvasGradient|null} The gradient object or null if creation fails
  */
 const safeRadialGradient = (ctx, x0, y0, r0, x1, y1, r1) => {
-  const safeR0 = Math.max(0.001, r0);
-  const safeR1 = Math.max(safeR0 + 0.001, r1); // Make sure r1 > r0
-  return ctx.createRadialGradient(x0, y0, safeR0, x1, y1, safeR1);
+  // Check if context is valid and has the createRadialGradient method
+  if (!ctx || typeof ctx.createRadialGradient !== 'function') {
+    console.warn('Invalid canvas context or createRadialGradient not available');
+    return null;
+  }
+  
+  try {
+    const safeR0 = Math.max(0.001, r0);
+    const safeR1 = Math.max(safeR0 + 0.001, r1); // Make sure r1 > r0
+    return ctx.createRadialGradient(x0, y0, safeR0, x1, y1, safeR1);
+  } catch (error) {
+    console.warn('Error creating radial gradient:', error);
+    return null;
+  }
 };
 
 /**
@@ -38,6 +50,12 @@ const safeRadialGradient = (ctx, x0, y0, r0, x1, y1, r1) => {
  * @param {Object} gameConstants - Game constants
  */
 export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstants) => {
+  // Verify we have a valid canvas context
+  if (!ctx || typeof ctx.beginPath !== 'function') {
+    console.warn('Invalid canvas context');
+    return;
+  }
+  
   // Validate player data
   if (!player || typeof player.x !== 'number' || typeof player.y !== 'number') {
     console.warn('Invalid player data for collapse effect');
@@ -88,18 +106,26 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
       const innerGlowRadius = Math.max(0.001, glowRadius * 0.3);
       
       const glowGradient = safeRadialGradient(
-        x, y, innerGlowRadius,
+        ctx, x, y, innerGlowRadius,
         x, y, glowRadius
       );
       
-      glowGradient.addColorStop(0, `${whiteColor} ${0.7 * easedImplode})`);
-      glowGradient.addColorStop(0.6, `${baseColor} ${0.5 * easedImplode})`);
-      glowGradient.addColorStop(1, `${baseColor} 0)`);
-      
-      ctx.beginPath();
-      safeArc(ctx, x, y, glowRadius);
-      ctx.fillStyle = glowGradient;
-      ctx.fill();
+      if (glowGradient) {
+        glowGradient.addColorStop(0, `${whiteColor} ${0.7 * easedImplode})`);
+        glowGradient.addColorStop(0.6, `${baseColor} ${0.5 * easedImplode})`);
+        glowGradient.addColorStop(1, `${baseColor} 0)`);
+        
+        ctx.beginPath();
+        safeArc(ctx, x, y, glowRadius);
+        ctx.fillStyle = glowGradient;
+        ctx.fill();
+      } else {
+        // Fallback if gradient creation failed
+        ctx.beginPath();
+        safeArc(ctx, x, y, glowRadius);
+        ctx.fillStyle = `${baseColor} ${0.5 * easedImplode})`;
+        ctx.fill();
+      }
       
       // Draw imploding rings that get smaller and faster
       for (let i = 0; i < 4; i++) {
@@ -154,18 +180,26 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
         const flashRadius = Math.max(0.001, PLAYER_RADIUS * 4 * (0.5 + explodeProgress * 2));
         
         const flashGradient = safeRadialGradient(
-          x, y, 0.001, // Ensure non-zero inner radius
+          ctx, x, y, 0.001, // Ensure non-zero inner radius
           x, y, flashRadius
         );
         
-        flashGradient.addColorStop(0, `${whiteColor} ${flashOpacity})`);
-        flashGradient.addColorStop(0.5, `${whiteColor} ${flashOpacity * 0.5})`);
-        flashGradient.addColorStop(1, `${whiteColor} 0)`);
-        
-        ctx.beginPath();
-        safeArc(ctx, x, y, flashRadius);
-        ctx.fillStyle = flashGradient;
-        ctx.fill();
+        if (flashGradient) {
+          flashGradient.addColorStop(0, `${whiteColor} ${flashOpacity})`);
+          flashGradient.addColorStop(0.5, `${whiteColor} ${flashOpacity * 0.5})`);
+          flashGradient.addColorStop(1, `${whiteColor} 0)`);
+          
+          ctx.beginPath();
+          safeArc(ctx, x, y, flashRadius);
+          ctx.fillStyle = flashGradient;
+          ctx.fill();
+        } else {
+          // Fallback if gradient creation failed
+          ctx.beginPath();
+          safeArc(ctx, x, y, flashRadius);
+          ctx.fillStyle = `${whiteColor} ${flashOpacity * 0.5})`;
+          ctx.fill();
+        }
       }
       
       // Main shockwave
@@ -229,14 +263,19 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
     ctx.restore();
   } catch (error) {
     console.warn('Error rendering collapse effect:', error.message || error);
-    // Simple fallback rendering
-    ctx.save();
-    ctx.beginPath();
-    safeArc(ctx, x, y, Math.max(0.001, gameConstants.PLAYER_RADIUS * 2));
-    ctx.fillStyle = player.isTagged ? 
-      'rgba(255, 107, 107, 0.5)' : 
-      'rgba(81, 131, 245, 0.5)';
-    ctx.fill();
-    ctx.restore();
+    // Ultra-simple fallback rendering that should never fail
+    try {
+      ctx.save();
+      ctx.beginPath();
+      safeArc(ctx, x, y, Math.max(0.001, gameConstants.PLAYER_RADIUS * 2));
+      ctx.fillStyle = player.isTagged ? 
+        'rgba(255, 107, 107, 0.5)' : 
+        'rgba(81, 131, 245, 0.5)';
+      ctx.fill();
+      ctx.restore();
+    } catch (e) {
+      // If even this fails, just log and move on
+      console.error('Ultimate fallback rendering failed:', e);
+    }
   }
 };
