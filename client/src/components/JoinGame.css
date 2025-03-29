@@ -117,3 +117,97 @@
 .game-instructions li {
   margin-bottom: 8px;
 }
+
+/* New styles for room list */
+.available-rooms {
+  margin-top: 20px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.available-rooms h3 {
+  color: #a5b9f8;
+  margin-bottom: 10px;
+}
+
+.room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.room-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 15px;
+  background-color: rgba(58, 74, 128, 0.3);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.room-item:hover {
+  background-color: rgba(58, 74, 128, 0.6);
+}
+
+.room-code {
+  font-family: monospace;
+  font-size: 18px;
+  font-weight: bold;
+  color: #e0e0e0;
+}
+
+.player-count {
+  color: #a5b9f8;
+  font-size: 14px;
+}
+
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  background-color: transparent;
+  border: 1px solid #3a4a80;
+  border-radius: 5px;
+  color: #a5b9f8;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 10px;
+  transition: all 0.2s;
+}
+
+.refresh-button:hover {
+  background-color: rgba(58, 74, 128, 0.4);
+}
+
+.empty-list {
+  text-align: center;
+  padding: 15px;
+  color: #a5b9f8;
+  font-style: italic;
+}
+
+.copy-success {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(20, 25, 50, 0.9);
+  color: #a5b9f8;
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-size: 14px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  animation: fadeOut 2s forwards;
+  animation-delay: 1s;
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
