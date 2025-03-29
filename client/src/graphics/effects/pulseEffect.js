@@ -8,6 +8,7 @@ import { easeOutQuad } from '../utils/mathUtils';
  * @param {number} radius - Radius (will be forced positive)
  */
 const safeArc = (ctx, x, y, radius) => {
+  if (!ctx || typeof ctx.arc !== 'function') return;
   const safeRadius = Math.max(0.001, radius);
   ctx.arc(x, y, safeRadius, 0, Math.PI * 2);
 };
@@ -21,12 +22,23 @@ const safeArc = (ctx, x, y, radius) => {
  * @param {number} x1 - End X
  * @param {number} y1 - End Y
  * @param {number} r1 - End radius
- * @returns {CanvasGradient} The gradient object
+ * @returns {CanvasGradient|null} The gradient object or null if creation fails
  */
 const safeRadialGradient = (ctx, x0, y0, r0, x1, y1, r1) => {
-  const safeR0 = Math.max(0.001, r0);
-  const safeR1 = Math.max(safeR0 + 0.001, r1); // Make sure r1 > r0
-  return ctx.createRadialGradient(x0, y0, safeR0, x1, y1, safeR1);
+  // Check if context is valid and has the createRadialGradient method
+  if (!ctx || typeof ctx.createRadialGradient !== 'function') {
+    console.warn('Invalid canvas context or createRadialGradient not available');
+    return null;
+  }
+  
+  try {
+    const safeR0 = Math.max(0.001, r0);
+    const safeR1 = Math.max(safeR0 + 0.001, r1); // Make sure r1 > r0
+    return ctx.createRadialGradient(x0, y0, safeR0, x1, y1, safeR1);
+  } catch (error) {
+    console.warn('Error creating radial gradient:', error);
+    return null;
+  }
 };
 
 /**
@@ -38,6 +50,12 @@ const safeRadialGradient = (ctx, x0, y0, r0, x1, y1, r1) => {
  * @param {Object} gameConstants - Game constants
  */
 export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) => {
+  // Verify we have a valid canvas context
+  if (!ctx || typeof ctx.beginPath !== 'function') {
+    console.warn('Invalid canvas context');
+    return;
+  }
+
   // If player position is invalid, don't render
   if (!player || typeof player.x !== 'number' || typeof player.y !== 'number') {
     console.warn('Invalid player data for pulse effect');
@@ -73,35 +91,44 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
   const pulseRadius = Math.max(0.1, GRAVITY_RANGE * easedProgress * 1.8);
   const pulseOpacity = 1 - easedProgress;
   
-  ctx.save();
-  
   try {
-    // Make sure inner radius is at least 0.001 to avoid Canvas API errors
-    // The error occurs because createRadialGradient doesn't accept 0 or negative values
-    const innerRadius = Math.max(0.001, pulseRadius * 0.8);
+    ctx.save();
     
-    // Create a gradient for more dramatic effect using our safe function
-    const gradient = safeRadialGradient(
-      x, y, innerRadius,
-      x, y, pulseRadius
-    );
-    
-    // Determine color based on player state
+    // Base color for the pulse effect
     const baseColor = player.isTagged ? 
       'rgba(255, 107, 107,' : 
       'rgba(81, 131, 245,';
     
-    gradient.addColorStop(0, `${baseColor} 0)`); // Transparent center
-    gradient.addColorStop(0.7, `${baseColor} ${pulseOpacity * 0.7})`)
-    gradient.addColorStop(0.9, `${baseColor} ${pulseOpacity})`)
-    gradient.addColorStop(1, `${baseColor} 0)`); // Fade to transparent at edge
+    // Make sure inner radius is at least 0.001 to avoid Canvas API errors
+    const innerRadius = Math.max(0.001, pulseRadius * 0.8);
     
-    // Draw pulse wave rings
-    ctx.beginPath();
-    safeArc(ctx, x, y, pulseRadius);
-    ctx.lineWidth = Math.max(0.001, 4 * (1 - easedProgress));
-    ctx.strokeStyle = gradient;
-    ctx.stroke();
+    // Create a gradient for more dramatic effect using our safe function
+    const gradient = safeRadialGradient(
+      ctx, x, y, innerRadius,
+      x, y, pulseRadius
+    );
+    
+    if (gradient) {
+      // Add color stops to gradient
+      gradient.addColorStop(0, `${baseColor} 0)`); // Transparent center
+      gradient.addColorStop(0.7, `${baseColor} ${pulseOpacity * 0.7})`);
+      gradient.addColorStop(0.9, `${baseColor} ${pulseOpacity})`);
+      gradient.addColorStop(1, `${baseColor} 0)`); // Fade to transparent at edge
+      
+      // Draw pulse wave rings
+      ctx.beginPath();
+      safeArc(ctx, x, y, pulseRadius);
+      ctx.lineWidth = Math.max(0.001, 4 * (1 - easedProgress));
+      ctx.strokeStyle = gradient;
+      ctx.stroke();
+    } else {
+      // Fallback if gradient creation failed
+      ctx.beginPath();
+      safeArc(ctx, x, y, pulseRadius);
+      ctx.lineWidth = Math.max(0.001, 4 * (1 - easedProgress));
+      ctx.strokeStyle = `${baseColor} ${pulseOpacity})`;
+      ctx.stroke();
+    }
     
     // Add an inner ring
     const innerRingRadius = Math.max(0.001, pulseRadius * 0.85);
@@ -122,28 +149,33 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
       const particleY = y + Math.sin(angle) * distance;
       
       if (isNaN(particleX) || isNaN(particleY)) {
-        console.warn('Invalid particle coordinates calculated');
         continue;
       }
       
       const size = Math.max(0.001, 3 * (1 - easedProgress));
       
       ctx.beginPath();
-      safeArc(ctx, particleX, particleY, size);
+      safeArc(ctx, x, y, size);
       ctx.fillStyle = `${baseColor} ${pulseOpacity * 1.2})`;
       ctx.fill();
     }
+    
+    ctx.restore();
   } catch (error) {
     console.warn('Error rendering pulse effect:', error);
-    // Fallback rendering in case of gradient error
-    ctx.beginPath();
-    safeArc(ctx, x, y, Math.max(0.001, pulseRadius));
-    ctx.lineWidth = Math.max(0.001, 4 * (1 - easedProgress));
-    ctx.strokeStyle = player.isTagged ? 
-      `rgba(255, 107, 107, ${pulseOpacity})` : 
-      `rgba(81, 131, 245, ${pulseOpacity})`;
-    ctx.stroke();
+    
+    // Ultra-simple fallback rendering that should never fail
+    try {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(0.001, pulseRadius), 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(100, 149, 237, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    } catch (e) {
+      // If even this fails, just log and move on
+      console.error('Ultimate fallback rendering failed:', e);
+    }
   }
-  
-  ctx.restore();
 };
