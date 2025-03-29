@@ -8,13 +8,13 @@ const GAME_CONSTANTS = {
   // Player settings
   PLAYER_RADIUS: 20,
   MAX_SPEED: 5,
-  BASE_GRAVITY_STRENGTH: 200,
-  GRAVITY_RANGE: 150,
-  PULSE_STRENGTH_MULTIPLIER: 5,
+  BASE_GRAVITY_STRENGTH: 450, // Increased from 200 for more noticeable gravity effect
+  GRAVITY_RANGE: 200, // Increased from 150 for wider area of effect
+  PULSE_STRENGTH_MULTIPLIER: 8, // Increased from 5 for more dramatic pulse
   PULSE_DURATION: 1000, // ms
   PULSE_COOLDOWN: 10000, // ms
   PULSE_ENERGY_COST: 20,
-  COLLAPSE_STRENGTH_MULTIPLIER: 10,
+  COLLAPSE_STRENGTH_MULTIPLIER: 15, // Increased from 10 for more dramatic collapse
   COLLAPSE_DURATION: 3000, // ms
   COLLAPSE_COOLDOWN: 30000, // ms
   COLLAPSE_ENERGY_COST: 50,
@@ -31,7 +31,7 @@ const GAME_CONSTANTS = {
   
   // Hazards
   BLACK_HOLE_RADIUS: 50,
-  BLACK_HOLE_STRENGTH: 400,
+  BLACK_HOLE_STRENGTH: 600, // Increased from 400 for stronger black holes
   BLACK_HOLE_PENALTY: 5,
   NEBULA_RADIUS: 150,
   NEBULA_GRAVITY_MODIFIER: 0.5,
@@ -274,7 +274,7 @@ class GameManager {
     for (const player of players) {
       // Calculate how long the player has been standing still
       const stillTime = Date.now() - player.lastMoveTime;
-      const stillnessMultiplier = Math.min(3, 1 + stillTime / 1000); // Max 3x after 2 seconds
+      const stillnessMultiplier = Math.min(4, 1 + stillTime / 800); // Increased to max 4x after 2.4 seconds (was 3x after 2 seconds)
       
       // Base gravity strength with stillness multiplier
       let gravityStrength = GAME_CONSTANTS.BASE_GRAVITY_STRENGTH * stillnessMultiplier;
@@ -294,12 +294,12 @@ class GameManager {
         const collapseElapsed = Date.now() - player.collapseStartTime;
         if (collapseElapsed <= GAME_CONSTANTS.COLLAPSE_DURATION) {
           if (collapseElapsed < GAME_CONSTANTS.COLLAPSE_DURATION / 2) {
-            // First half: gravity decreases
-            gravityStrength *= (1 - collapseElapsed / (GAME_CONSTANTS.COLLAPSE_DURATION / 2));
+            // First half: gravity decreases - less drastic reduction for visual perception
+            gravityStrength *= (1 - collapseElapsed / (GAME_CONSTANTS.COLLAPSE_DURATION / 1.5));
           } else {
-            // Second half: gravity explodes
+            // Second half: gravity explodes - more dramatic explosion
             const explosionPhase = (collapseElapsed - GAME_CONSTANTS.COLLAPSE_DURATION / 2) / (GAME_CONSTANTS.COLLAPSE_DURATION / 2);
-            gravityStrength *= GAME_CONSTANTS.COLLAPSE_STRENGTH_MULTIPLIER * explosionPhase;
+            gravityStrength *= GAME_CONSTANTS.COLLAPSE_STRENGTH_MULTIPLIER * explosionPhase * 1.5; // 50% more explosive
           }
         } else {
           player.isCollapsing = false;
@@ -317,10 +317,14 @@ class GameManager {
         
         const dist = this.distance(player.x, player.y, otherPlayer.x, otherPlayer.y);
         
-        // Apply gravity if within range
+        // Apply gravity if within range - increased range for better visibility
         if (dist < GAME_CONSTANTS.GRAVITY_RANGE && dist > 0) {
-          // Calculate gravity force (inverse square law)
-          let force = otherPlayer.gravityStrength / Math.pow(dist, 2);
+          // Calculate gravity force with enhanced inverse square law (1.5 power instead of 2)
+          // This makes gravity stronger at medium distances but still decreases with distance
+          let force = otherPlayer.gravityStrength / Math.pow(dist, 1.5);
+          
+          // Apply minimum force threshold to make gravity more perceptible
+          force = Math.max(force, 0.5);
           
           // Check if either player is in a nebula
           for (const hazard of room.hazards) {
@@ -338,9 +342,10 @@ class GameManager {
           const dx = (otherPlayer.x - player.x) / dist;
           const dy = (otherPlayer.y - player.y) / dist;
           
-          // Apply force to velocity
-          player.velocityX += dx * force * (GAME_CONSTANTS.TICK_RATE / 1000);
-          player.velocityY += dy * force * (GAME_CONSTANTS.TICK_RATE / 1000);
+          // Apply force to velocity with increased tick multiplier for more immediate feedback
+          const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 800; // Increased from 1000 for stronger per-tick effect
+          player.velocityX += dx * force * tickMultiplier;
+          player.velocityY += dy * force * tickMultiplier;
         }
       }
     }
@@ -355,14 +360,17 @@ class GameManager {
         if (hazard.type === 'blackHole') {
           const dist = this.distance(player.x, player.y, hazard.x, hazard.y);
           
-          // Apply gravity pull
+          // Apply gravity pull - enhanced formula for more dramatic effect
           if (dist > 0) {
-            const force = hazard.strength / Math.pow(dist, 2);
+            // Stronger pull for closer objects (power of 1.5 instead of 2)
+            const force = hazard.strength / Math.pow(dist, 1.5);
             const dx = (hazard.x - player.x) / dist;
             const dy = (hazard.y - player.y) / dist;
             
-            player.velocityX += dx * force * (GAME_CONSTANTS.TICK_RATE / 1000);
-            player.velocityY += dy * force * (GAME_CONSTANTS.TICK_RATE / 1000);
+            // Apply increased force for more dramatic pull
+            const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 800; // Enhanced for stronger effect
+            player.velocityX += dx * force * tickMultiplier;
+            player.velocityY += dy * force * tickMultiplier;
           }
           
           // Check if player fell into black hole
@@ -417,9 +425,9 @@ class GameManager {
           const dist = this.distance(player.x, player.y, hazard.x, hazard.y);
           
           if (dist <= GAME_CONSTANTS.PLAYER_RADIUS + hazard.radius) {
-            // Nudge player in comet's direction
-            player.velocityX += hazard.velocityX;
-            player.velocityY += hazard.velocityY;
+            // Stronger nudge for more dramatic comet impact
+            player.velocityX += hazard.velocityX * 1.5; // 50% stronger impact
+            player.velocityY += hazard.velocityY * 1.5;
           }
         }
       }
@@ -435,9 +443,9 @@ class GameManager {
         player.velocityY += player.movementDirection.y * 0.5;
       }
       
-      // Apply damping to simulate friction
-      player.velocityX *= 0.95;
-      player.velocityY *= 0.95;
+      // Apply slightly less damping for more continuous motion
+      player.velocityX *= 0.96; // Changed from 0.95 for less friction
+      player.velocityY *= 0.96;
       
       // Limit max speed
       const speed = Math.sqrt(player.velocityX * player.velocityX + player.velocityY * player.velocityY);
@@ -499,10 +507,10 @@ class GameManager {
       // Regenerate energy
       this.regenerateEnergy(room);
       
-      // Double gravity during storm
+      // Stronger gravity during storm for more dramatic effects
       if (inGravityStorm) {
         for (const player of Object.values(room.players)) {
-          player.gravityStrength *= 2;
+          player.gravityStrength *= 3; // Increased from 2x to 3x for more dramatic storm
         }
       }
       
