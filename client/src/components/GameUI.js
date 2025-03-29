@@ -10,7 +10,8 @@ const GameUI = ({
   latestJoin, 
   latestLeave,
   playerData,
-  gameConstants
+  gameConstants,
+  isMobile
 }) => {
   const [showRoomId, setShowRoomId] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -58,6 +59,19 @@ const GameUI = ({
   
   // Get current player's position in leaderboard
   const playerRank = players.findIndex(p => p.id === playerId) + 1;
+  
+  // Show mobile tutorial on first load for mobile users
+  useEffect(() => {
+    if (isMobile) {
+      setShowControls(true);
+      // Auto-hide after 10 seconds
+      const timer = setTimeout(() => {
+        setShowControls(false);
+      }, 10000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isMobile]);
   
   return (
     <div className="game-ui">
@@ -164,11 +178,19 @@ const GameUI = ({
       {showControls && (
         <div className="controls-help">
           <h3>Controls</h3>
-          <ul>
-            <li><span className="key">WASD</span> or <span className="key">Arrow Keys</span> to move</li>
-            <li><span className="key">Space</span> to activate gravity pulse</li>
-            <li><span className="key">E</span> for gravity collapse</li>
-          </ul>
+          {isMobile ? (
+            <ul>
+              <li><strong>Tap</strong> anywhere to move in that direction</li>
+              <li><strong>Double-tap</strong> to activate gravity pulse</li>
+              <li><strong>Long press</strong> (hold 0.8s) for gravity collapse</li>
+            </ul>
+          ) : (
+            <ul>
+              <li><span className="key">WASD</span> or <span className="key">Arrow Keys</span> to move</li>
+              <li><span className="key">Space</span> to activate gravity pulse</li>
+              <li><span className="key">E</span> for gravity collapse</li>
+            </ul>
+          )}
           <h3>Tips</h3>
           <ul>
             <li>Standing still increases your gravity pull</li>
@@ -183,6 +205,13 @@ const GameUI = ({
       <div className="exit-game">
         <button onClick={onExitGame}>Exit Game</button>
       </div>
+
+      {/* Mobile indicator */}
+      {isMobile && (
+        <div className="mobile-indicator">
+          <span>Mobile Mode</span>
+        </div>
+      )}
     </div>
   );
 };
