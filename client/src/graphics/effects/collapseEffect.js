@@ -1,6 +1,18 @@
 import { easeInOutQuad, easeInQuad, easeOutQuad } from '../utils/mathUtils';
 
 /**
+ * Safely create an arc path
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} x - Center X
+ * @param {number} y - Center Y
+ * @param {number} radius - Radius (will be forced positive)
+ */
+const safeArc = (ctx, x, y, radius) => {
+  const safeRadius = Math.max(0.001, radius);
+  ctx.arc(x, y, safeRadius, 0, Math.PI * 2);
+};
+
+/**
  * Render a gravity collapse effect
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {Object} player - Player that triggered the collapse
@@ -9,6 +21,12 @@ import { easeInOutQuad, easeInQuad, easeOutQuad } from '../utils/mathUtils';
  * @param {Object} gameConstants - Game constants
  */
 export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstants) => {
+  // Validate player data
+  if (!player || typeof player.x !== 'number' || typeof player.y !== 'number') {
+    console.warn('Invalid player data for collapse effect');
+    return;
+  }
+
   const x = player.x - cameraX;
   const y = player.y - cameraY;
   
@@ -29,7 +47,7 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
       // First half: implode (shrink to center)
       const implodeProgress = collapseProgress * 2; // 0 to 1
       const easedImplode = easeInQuad(implodeProgress);
-      const implodeRadius = gameConstants.GRAVITY_RANGE * (1 - easedImplode);
+      const implodeRadius = Math.max(0.001, gameConstants.GRAVITY_RANGE * (1 - easedImplode));
       
       // Create an intense glow that grows as the implosion progresses
       const glowRadius = Math.max(0.001, gameConstants.PLAYER_RADIUS * (1 + easedImplode * 3));
@@ -45,7 +63,7 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
       glowGradient.addColorStop(1, `${baseColor} 0)`);
       
       ctx.beginPath();
-      ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+      safeArc(ctx, x, y, glowRadius);
       ctx.fillStyle = glowGradient;
       ctx.fill();
       
@@ -56,7 +74,7 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
         
         if (ringRadius > 0) {
           ctx.beginPath();
-          ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
+          safeArc(ctx, x, y, ringRadius);
           ctx.strokeStyle = `${whiteColor} ${0.8 - ringProgress * 0.6})`;
           ctx.lineWidth = Math.max(0.001, 3 - ringProgress * 2);
           ctx.stroke();
@@ -72,13 +90,18 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
         const particleProgress = Math.min(1, (implodeProgress + (i / particleCount) * 0.3) % 1);
         const distance = Math.max(0.001, implodeRadius * (1 - easedImplode * particleProgress));
         
+        // Verify calculated coordinates are valid numbers
         const particleX = x + Math.cos(angle) * distance;
         const particleY = y + Math.sin(angle) * distance;
+        
+        if (isNaN(particleX) || isNaN(particleY)) {
+          continue;
+        }
         
         const size = Math.max(0.001, 2 * (1 - particleProgress));
         
         ctx.beginPath();
-        ctx.arc(particleX, particleY, size, 0, Math.PI * 2);
+        safeArc(ctx, particleX, particleY, size);
         ctx.fillStyle = `${baseColor} ${0.8 - particleProgress * 0.5})`;
         ctx.fill();
       }
@@ -104,14 +127,14 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
         flashGradient.addColorStop(1, `${whiteColor} 0)`);
         
         ctx.beginPath();
-        ctx.arc(x, y, flashRadius, 0, Math.PI * 2);
+        safeArc(ctx, x, y, flashRadius);
         ctx.fillStyle = flashGradient;
         ctx.fill();
       }
       
       // Main shockwave
       ctx.beginPath();
-      ctx.arc(x, y, explodeRadius, 0, Math.PI * 2);
+      safeArc(ctx, x, y, explodeRadius);
       ctx.strokeStyle = `${whiteColor} ${1 - easedExplode})`;
       ctx.lineWidth = Math.max(0.001, 8 * (1 - easedExplode));
       ctx.stroke();
@@ -128,7 +151,7 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
           
           if (waveRadius > 0) {
             ctx.beginPath();
-            ctx.arc(x, y, waveRadius, 0, Math.PI * 2);
+            safeArc(ctx, x, y, waveRadius);
             ctx.strokeStyle = `${baseColor} ${(1 - waveProgress) * 0.7})`;
             ctx.lineWidth = Math.max(0.001, (waveCount - i + 1) * (1 - waveProgress));
             ctx.stroke();
@@ -145,15 +168,20 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
         const particleSpeed = 0.8 + (i % 3) * 0.2;
         const distance = Math.max(0.001, explodeRadius * easedExplode * particleSpeed);
         
+        // Verify calculated coordinates are valid numbers
         const particleX = x + Math.cos(angle) * distance;
         const particleY = y + Math.sin(angle) * distance;
+        
+        if (isNaN(particleX) || isNaN(particleY)) {
+          continue;
+        }
         
         // Particles get smaller as they move outward
         const size = Math.max(0.001, 4 * (1 - easedExplode * particleSpeed));
         
         if (size > 0) {
           ctx.beginPath();
-          ctx.arc(particleX, particleY, size, 0, Math.PI * 2);
+          safeArc(ctx, particleX, particleY, size);
           ctx.fillStyle = i % 3 === 0 ?
             `${whiteColor} ${1 - easedExplode})` :
             `${baseColor} ${1 - easedExplode})`;
@@ -168,7 +196,7 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
     // Simple fallback rendering
     ctx.save();
     ctx.beginPath();
-    ctx.arc(x, y, gameConstants.PLAYER_RADIUS * 2, 0, Math.PI * 2);
+    safeArc(ctx, x, y, Math.max(0.001, gameConstants.PLAYER_RADIUS * 2));
     ctx.fillStyle = player.isTagged ? 
       'rgba(255, 107, 107, 0.5)' : 
       'rgba(81, 131, 245, 0.5)';
