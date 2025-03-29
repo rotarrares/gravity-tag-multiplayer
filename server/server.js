@@ -24,13 +24,18 @@ app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// Set up Socket.IO with more permissive CORS in development
+// Better socket.io configuration for production
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
+    origin: "*",
+    methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  transports: ['websocket', 'polling'],
+  pingTimeout: 30000,
+  pingInterval: 25000,
+  upgradeTimeout: 30000,
+  maxHttpBufferSize: 1e8
 });
 
 // Initialize game manager
@@ -56,38 +61,49 @@ io.on('connection', (socket) => {
   
   // Player joins game
   socket.on('joinGame', ({ username, roomId }) => {
+    console.log(`Player ${username} (${socket.id}) attempting to join room: ${roomId || 'new room'}`);
+    
     let targetRoomId = roomId;
     
     // Create new room if none specified
     if (!targetRoomId) {
       targetRoomId = uuidv4();
       gameManager.createRoom(targetRoomId);
+      console.log(`Created new room: ${targetRoomId}`);
     } else if (!gameManager.rooms[targetRoomId]) {
       // Create room if it doesn't exist
       gameManager.createRoom(targetRoomId);
+      console.log(`Created room from ID: ${targetRoomId}`);
     }
     
-    // Create player
-    const player = createPlayer(socket.id, username);
-    
-    // Add player to room
-    gameManager.addPlayerToRoom(targetRoomId, player);
-    
-    // Join socket room
-    socket.join(targetRoomId);
-    
-    // Send room info to player
-    socket.emit('roomJoined', { 
-      roomId: targetRoomId,
-      playerId: socket.id,
-      gameConstants: GAME_CONSTANTS
-    });
-    
-    // Notify room of new player
-    io.to(targetRoomId).emit('playerJoined', { 
-      id: socket.id, 
-      username: username 
-    });
+    try {
+      // Create player
+      const player = createPlayer(socket.id, username);
+      
+      // Add player to room
+      gameManager.addPlayerToRoom(targetRoomId, player);
+      
+      // Join socket room
+      socket.join(targetRoomId);
+      
+      console.log(`Player ${username} (${socket.id}) joined room: ${targetRoomId}`);
+      
+      // Send room info to player
+      socket.emit('roomJoined', { 
+        roomId: targetRoomId,
+        playerId: socket.id,
+        gameConstants: GAME_CONSTANTS
+      });
+      
+      // Notify room of new player
+      io.to(targetRoomId).emit('playerJoined', { 
+        id: socket.id, 
+        username: username 
+      });
+    } catch (error) {
+      console.error(`Error joining game: ${error.message}`);
+      socket.emit('error', { message: 'Failed to join game. Please try again.' });
+    }
   });
   
   // Player movement
@@ -131,9 +147,15 @@ io.on('connection', (socket) => {
         // Clean up empty rooms
         if (Object.keys(gameManager.rooms[roomId].players).length === 0) {
           delete gameManager.rooms[roomId];
+          console.log(`Deleted empty room: ${roomId}`);
         }
       }
     });
+  });
+  
+  // General error handler
+  socket.on('error', (error) => {
+    console.error(`Socket error for ${socket.id}:`, error);
   });
 });
 
@@ -153,12 +175,12 @@ if (process.env.NODE_ENV === 'production') {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send('Something broke!');
+  console.error('Server error:', err.stack);
+  res.status(500).send('Something broke on the server!');
 });
 
 // Start server
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
