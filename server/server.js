@@ -4,7 +4,6 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
-const { v4: uuidv4 } = require('uuid');
 
 // Game logic
 const { 
@@ -41,6 +40,16 @@ const io = new Server(server, {
 // Initialize game manager
 const gameManager = new GameManager();
 
+// Function to generate a 4-character room code
+function generateRoomCode() {
+  const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed similar looking characters (I, O, 0, 1)
+  let result = '';
+  for (let i = 0; i < 4; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return result;
+}
+
 // Set up regular game state updates
 setInterval(() => {
   gameManager.update();
@@ -67,7 +76,11 @@ io.on('connection', (socket) => {
     
     // Create new room if none specified
     if (!targetRoomId) {
-      targetRoomId = uuidv4();
+      // Generate a 4-character room code
+      do {
+        targetRoomId = generateRoomCode();
+      } while (gameManager.rooms[targetRoomId]); // Ensure it's unique
+      
       gameManager.createRoom(targetRoomId);
       console.log(`Created new room: ${targetRoomId}`);
     } else if (!gameManager.rooms[targetRoomId]) {
@@ -104,6 +117,16 @@ io.on('connection', (socket) => {
       console.error(`Error joining game: ${error.message}`);
       socket.emit('error', { message: 'Failed to join game. Please try again.' });
     }
+  });
+  
+  // Get available rooms
+  socket.on('getAvailableRooms', () => {
+    const availableRooms = Object.entries(gameManager.rooms).map(([roomId, room]) => ({
+      roomId,
+      playerCount: Object.keys(room.players).length
+    }));
+    
+    socket.emit('availableRooms', availableRooms);
   });
   
   // Handle direct request for game constants
