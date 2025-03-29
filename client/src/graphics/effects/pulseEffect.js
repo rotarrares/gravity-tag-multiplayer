@@ -36,13 +36,8 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
     // Use easing function for smoother animation
     const easedProgress = easeOutQuad(pulseProgress);
     
-    // Expand and fade out - limit to visible screen area
-    const screenSize = Math.max(ctx.canvas.width, ctx.canvas.height);
-    const maxVisibleRadius = screenSize * 0.6; // 60% of screen diagonal
-    const fullGravityRange = Math.min(gameConstants.GRAVITY_RANGE, maxVisibleRadius);
-    
-    // Calculate pulse wave radius - smaller proportion of the larger gravity range
-    const pulseRadius = fullGravityRange * easedProgress * 0.3;
+    // Expand and fade out - make pulse radius smaller relative to the much larger gravity range
+    const pulseRadius = gameConstants.GRAVITY_RANGE * easedProgress * 0.2; // Reduced from 0.7 to 0.2
     const pulseOpacity = 1 - easedProgress;
     
     ctx.save();
@@ -72,23 +67,31 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
     ctx.strokeStyle = `${baseColor} ${pulseOpacity * 0.7})`;
     ctx.stroke();
     
-    // Draw partial visible range indication
-    const visibleRange = Math.min(fullGravityRange, maxVisibleRadius);
+    // Draw "medium range" circle to help understand gravity range
     ctx.beginPath();
-    safeArc(ctx, x, y, visibleRange * 0.5); // Show half the range
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 8]); // Dashed line for the gravity range
+    safeArc(ctx, x, y, gameConstants.GRAVITY_RANGE * 0.3); // 30% of full range
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 5]);
     ctx.strokeStyle = `${baseColor} ${0.4 * pulseOpacity})`;
     ctx.stroke();
     
-    // Show text with actual range
-    ctx.font = "14px Arial";
-    ctx.fillStyle = `${baseColor} ${0.7 * pulseOpacity})`;
-    ctx.textAlign = "center";
-    ctx.fillText(`Gravity Range: ${Math.round(gameConstants.GRAVITY_RANGE)}`, x, y + visibleRange * 0.5 + 20);
+    // Draw large translucent field to show gravity range
+    ctx.beginPath();
+    safeArc(ctx, x, y, gameConstants.GRAVITY_RANGE * 0.6); // 60% of full range
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 8]); 
+    ctx.strokeStyle = `${baseColor} ${0.25 * pulseOpacity})`;
+    ctx.stroke();
     
-    // Reset line dash
-    ctx.setLineDash([]);
+    // Draw outermost gravity range indicator (very faint)
+    ctx.beginPath();
+    safeArc(ctx, x, y, Math.min(1000, gameConstants.GRAVITY_RANGE)); // Cap at 1000 to keep visible
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([1, 15]);
+    ctx.strokeStyle = `${baseColor} ${0.15 * pulseOpacity})`;
+    ctx.stroke();
+    
+    ctx.setLineDash([]); // Reset line dash
     
     // Add energy particles in the wave (larger, more visible)
     const particleCount = 18; // More particles
@@ -108,7 +111,7 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
     }
     
     // Add streaks radiating outward for more visual impact
-    const streakCount = 24; // More streaks
+    const streakCount = 12;
     for (let i = 0; i < streakCount; i++) {
       const angle = (i / streakCount) * Math.PI * 2;
       const innerRadius = pulseRadius * 0.2;
