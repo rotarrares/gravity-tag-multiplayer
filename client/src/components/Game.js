@@ -9,7 +9,8 @@ const Game = ({ username, roomId, playerId, onExitGame }) => {
   const [gameState, setGameState] = useState({
     players: {},
     hazards: [],
-    timeRemaining: 0
+    timeRemaining: 0,
+    roomId: roomId // Store roomId in gameState for mobile touch handlers
   });
   const [gameConstants, setGameConstants] = useState(null);
   const [players, setPlayers] = useState([]);
@@ -19,10 +20,20 @@ const Game = ({ username, roomId, playerId, onExitGame }) => {
   const [collapseTriggered, setCollapseTriggered] = useState(null);
   const [loadingError, setLoadingError] = useState(null);
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   
   // Key state tracking
   const keysPressed = useRef({});
   const lastDirection = useRef({ x: 0, y: 0 });
+  
+  // Detect mobile device on mount
+  useEffect(() => {
+    const checkMobile = () => {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    };
+    
+    setIsMobile(checkMobile());
+  }, []);
   
   // Setup a loading timeout
   useEffect(() => {
@@ -52,7 +63,11 @@ const Game = ({ username, roomId, playerId, onExitGame }) => {
     // Handle game state updates
     const handleGameState = (state) => {
       console.log('Game state update received');
-      setGameState(state);
+      // Preserve roomId when updating gameState
+      setGameState({
+        ...state,
+        roomId: roomId
+      });
     };
     
     // Handle room joined event
@@ -124,73 +139,88 @@ const Game = ({ username, roomId, playerId, onExitGame }) => {
       });
     }
     
-    // Set up keyboard event listeners for movement
-    const handleKeyDown = (e) => {
-      if (e.repeat) return; // Ignore key repeat events
+    // Only set up keyboard controls if not on mobile
+    if (!isMobile) {
+      // Set up keyboard event listeners for movement
+      const handleKeyDown = (e) => {
+        if (e.repeat) return; // Ignore key repeat events
+        
+        keysPressed.current[e.key] = true;
+        
+        // Handle gravity pulse (Space)
+        if (e.code === 'Space') {
+          socket.emit('gravityPulse', { roomId });
+        }
+        
+        // Handle gravity collapse (E)
+        if (e.key === 'e' || e.key === 'E') {
+          socket.emit('gravityCollapse', { roomId });
+        }
+        
+        updateMovementDirection();
+      };
       
-      keysPressed.current[e.key] = true;
+      const handleKeyUp = (e) => {
+        delete keysPressed.current[e.key];
+        updateMovementDirection();
+      };
       
-      // Handle gravity pulse (Space)
-      if (e.code === 'Space') {
-        socket.emit('gravityPulse', { roomId });
-      }
+      // Calculate and send movement direction based on keys pressed
+      const updateMovementDirection = () => {
+        const keys = keysPressed.current;
+        let direction = { x: 0, y: 0 };
+        
+        // Check arrow keys and WASD
+        if (keys['ArrowUp'] || keys['w'] || keys['W']) direction.y -= 1;
+        if (keys['ArrowDown'] || keys['s'] || keys['S']) direction.y += 1;
+        if (keys['ArrowLeft'] || keys['a'] || keys['A']) direction.x -= 1;
+        if (keys['ArrowRight'] || keys['d'] || keys['D']) direction.x += 1;
+        
+        // Normalize for diagonal movement
+        if (direction.x !== 0 && direction.y !== 0) {
+          const magnitude = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+          direction.x /= magnitude;
+          direction.y /= magnitude;
+        }
+        
+        // Only send update if direction changed
+        if (direction.x !== lastDirection.current.x || direction.y !== lastDirection.current.y) {
+          lastDirection.current = direction;
+          socket.emit('playerMove', { roomId, direction });
+        }
+      };
       
-      // Handle gravity collapse (E)
-      if (e.key === 'e' || e.key === 'E') {
-        socket.emit('gravityCollapse', { roomId });
-      }
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
       
-      updateMovementDirection();
-    };
-    
-    const handleKeyUp = (e) => {
-      delete keysPressed.current[e.key];
-      updateMovementDirection();
-    };
-    
-    // Calculate and send movement direction based on keys pressed
-    const updateMovementDirection = () => {
-      const keys = keysPressed.current;
-      let direction = { x: 0, y: 0 };
-      
-      // Check arrow keys and WASD
-      if (keys['ArrowUp'] || keys['w'] || keys['W']) direction.y -= 1;
-      if (keys['ArrowDown'] || keys['s'] || keys['S']) direction.y += 1;
-      if (keys['ArrowLeft'] || keys['a'] || keys['A']) direction.x -= 1;
-      if (keys['ArrowRight'] || keys['d'] || keys['D']) direction.x += 1;
-      
-      // Normalize for diagonal movement
-      if (direction.x !== 0 && direction.y !== 0) {
-        const magnitude = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
-        direction.x /= magnitude;
-        direction.y /= magnitude;
-      }
-      
-      // Only send update if direction changed
-      if (direction.x !== lastDirection.current.x || direction.y !== lastDirection.current.y) {
-        lastDirection.current = direction;
-        socket.emit('playerMove', { roomId, direction });
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    
-    // Cleanup function
-    return () => {
-      socket.off('gameState', handleGameState);
-      socket.off('roomJoined', handleRoomJoined);
-      socket.off('gameConstants', handleGameConstants);
-      socket.off('playerJoined', handlePlayerJoined);
-      socket.off('playerLeft', handlePlayerLeft);
-      socket.off('pulseTriggered', handlePulseTriggered);
-      socket.off('collapseTriggered', handleCollapseTriggered);
-      socket.off('error', handleError);
-      
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [socket, roomId, username, playerId]);
+      // Cleanup keyboard event listeners
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
+        
+        socket.off('gameState', handleGameState);
+        socket.off('roomJoined', handleRoomJoined);
+        socket.off('gameConstants', handleGameConstants);
+        socket.off('playerJoined', handlePlayerJoined);
+        socket.off('playerLeft', handlePlayerLeft);
+        socket.off('pulseTriggered', handlePulseTriggered);
+        socket.off('collapseTriggered', handleCollapseTriggered);
+        socket.off('error', handleError);
+      };
+    } else {
+      // Just clean up socket listeners for mobile
+      return () => {
+        socket.off('gameState', handleGameState);
+        socket.off('roomJoined', handleRoomJoined);
+        socket.off('gameConstants', handleGameConstants);
+        socket.off('playerJoined', handlePlayerJoined);
+        socket.off('playerLeft', handlePlayerLeft);
+        socket.off('pulseTriggered', handlePulseTriggered);
+        socket.off('collapseTriggered', handleCollapseTriggered);
+        socket.off('error', handleError);
+      };
+    }
+  }, [socket, roomId, username, playerId, isMobile]);
   
   // Convert players object to array for leaderboard
   useEffect(() => {
@@ -292,6 +322,7 @@ const Game = ({ username, roomId, playerId, onExitGame }) => {
         latestLeave={latestLeave}
         playerData={gameState.players[playerId]}
         gameConstants={gameConstants}
+        isMobile={isMobile}
       />
     </div>
   );
