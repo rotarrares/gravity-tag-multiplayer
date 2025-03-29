@@ -6,9 +6,16 @@ const SpatialGrid = require('./physics/spatial');
 
 // Game manager handles all game logic
 class GameManager {
-  constructor() {
+  constructor(io) {
     this.rooms = {};
     this.roomStates = {}; // For delta compression
+    this.io = io; // Socket.io instance for broadcasting
+    this.eventEmitter = null; // Function to emit events
+  }
+  
+  // Set the event emitter function
+  setEventEmitter(emitter) {
+    this.eventEmitter = emitter;
   }
   
   // Create a new game room
@@ -20,7 +27,13 @@ class GameManager {
       timeRemaining: GAME_CONSTANTS.ROUND_DURATION,
       lastCometSpawn: 0,
       // Add spatial grid for optimized physics
-      spatialGrid: new SpatialGrid(300)
+      spatialGrid: new SpatialGrid(300),
+      // Add a reference to the event emitter for broadcasting room events
+      emitEvent: (eventName, data) => {
+        if (this.eventEmitter) {
+          this.eventEmitter(roomId, eventName, data);
+        }
+      }
     };
     
     // Initialize the previous state for delta compression
@@ -344,6 +357,27 @@ class GameManager {
           }
         }
       }
+      
+      // Check if we need to randomly tag someone (if no one is tagged)
+      const players = Object.values(room.players);
+      const anyoneTagged = players.some(p => p.isTagged);
+      
+      if (players.length >= 2 && !anyoneTagged) {
+        // No one is tagged - randomly tag someone
+        const randomPlayer = players[Math.floor(Math.random() * players.length)];
+        randomPlayer.isTagged = true;
+        randomPlayer.lastTaggedTime = now;
+        
+        console.log(`Randomly tagged player ${randomPlayer.username || randomPlayer.id} to continue the game`);
+        
+        // Notify room of new tag
+        if (room.emitEvent) {
+          room.emitEvent('playerTagged', {
+            taggedId: randomPlayer.id,
+            timestamp: now
+          });
+        }
+      }
     });
   }
   
@@ -380,6 +414,24 @@ class GameManager {
       player.velocityY = 0;
       player.isTagged = false;
       player.wasLastUntagged = false;
+    }
+    
+    // After reset, randomly tag a player to start the game
+    const players = Object.values(room.players);
+    if (players.length >= 2) {
+      const randomPlayer = players[Math.floor(Math.random() * players.length)];
+      randomPlayer.isTagged = true;
+      randomPlayer.lastTaggedTime = now;
+      
+      console.log(`Randomly tagged player ${randomPlayer.username || randomPlayer.id} to start a new round`);
+      
+      // Notify room of initial tag for new round
+      if (room.emitEvent) {
+        room.emitEvent('playerTagged', {
+          taggedId: randomPlayer.id,
+          timestamp: now
+        });
+      }
     }
   }
 }
