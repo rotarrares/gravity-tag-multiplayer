@@ -57,7 +57,10 @@ class GameManager {
         y: player.y,
         isTagged: player.isTagged,
         score: player.score,
-        username: player.username
+        username: player.username,
+        isPulsing: false,
+        isCollapsing: false,
+        energy: player.energy
       };
     }
   }
@@ -156,13 +159,60 @@ class GameManager {
       timeRemaining: room.timeRemaining
     };
     
-    // Calculate player deltas
+    // Calculate player deltas with special treatment for animation states
     for (const [playerId, player] of Object.entries(room.players)) {
       const prevPlayer = previousState.players[playerId];
       
-      // Always include username for new players or if it's not in the previous state
-      if (!prevPlayer || !prevPlayer.username) {
-        delta.players[playerId] = {
+      // Set up a detection flag for any real changes
+      let hasChanges = false;
+      
+      // Create a baseline for this player's updates
+      const playerUpdate = {
+        x: player.x,
+        y: player.y,
+        isTagged: player.isTagged,
+        score: player.score,
+        username: player.username,
+        energy: player.energy
+      };
+      
+      // Special handling for animation states
+      // Only include pulse/collapse states in the update if they've just changed
+      // from false to true (starting), or if they were true and are now false (ending)
+      if (!prevPlayer) {
+        // New player, include everything
+        playerUpdate.isPulsing = player.isPulsing;
+        playerUpdate.isCollapsing = player.isCollapsing;
+        hasChanges = true;
+      } else {
+        // Check for regular property changes
+        if (prevPlayer.x !== player.x || 
+            prevPlayer.y !== player.y || 
+            prevPlayer.isTagged !== player.isTagged ||
+            prevPlayer.score !== player.score ||
+            prevPlayer.energy !== player.energy) {
+          hasChanges = true;
+        }
+        
+        // Handle pulse state - only include if it's a transition
+        if (prevPlayer.isPulsing !== player.isPulsing) {
+          playerUpdate.isPulsing = player.isPulsing;
+          hasChanges = true;
+        }
+        
+        // Handle collapse state - only include if it's a transition
+        if (prevPlayer.isCollapsing !== player.isCollapsing) {
+          playerUpdate.isCollapsing = player.isCollapsing;
+          hasChanges = true;
+        }
+      }
+      
+      // If we have actual changes, include the player in the delta
+      if (hasChanges) {
+        delta.players[playerId] = playerUpdate;
+        
+        // Update previous state with current values for next comparison
+        previousState.players[playerId] = {
           x: player.x,
           y: player.y,
           isTagged: player.isTagged,
@@ -172,38 +222,19 @@ class GameManager {
           isCollapsing: player.isCollapsing,
           energy: player.energy
         };
-        
-        // Update previous state
-        previousState.players[playerId] = {...delta.players[playerId]};
-      } 
-      // Only include changed properties
-      else if (prevPlayer.x !== player.x || 
-          prevPlayer.y !== player.y || 
-          prevPlayer.isTagged !== player.isTagged ||
-          prevPlayer.score !== player.score ||
-          prevPlayer.isPulsing !== player.isPulsing ||
-          prevPlayer.isCollapsing !== player.isCollapsing ||
-          prevPlayer.energy !== player.energy) {
-        
-        delta.players[playerId] = {
-          x: player.x,
-          y: player.y,
-          isTagged: player.isTagged,
-          score: player.score,
-          username: player.username,
-          isPulsing: player.isPulsing,
-          isCollapsing: player.isCollapsing,
-          energy: player.energy
-        };
-        
-        // Update previous state
-        previousState.players[playerId] = {...delta.players[playerId]};
       }
     }
     
-    // For hazards, just include the entire array for simplicity
-    // In a future update, we could apply delta compression to hazards too
-    delta.hazards = room.hazards;
+    // For hazards, track if they've changed by keeping a signature of each hazard state
+    // This avoids resending identical hazards
+    const currentHazardState = JSON.stringify(
+      room.hazards.map(h => ({type: h.type, x: h.x, y: h.y}))
+    );
+    
+    if (!previousState.hazardSignature || previousState.hazardSignature !== currentHazardState) {
+      delta.hazards = room.hazards;
+      previousState.hazardSignature = currentHazardState;
+    }
     
     return delta;
   }
@@ -262,6 +293,25 @@ class GameManager {
       // Check if round is over
       if (room.timeRemaining === 0) {
         this.resetRound(room);
+      }
+      
+      // Update animation states based on time
+      for (const player of Object.values(room.players)) {
+        // Check if pulse animation should end
+        if (player.isPulsing) {
+          const pulseElapsed = now - player.pulseStartTime;
+          if (pulseElapsed > GAME_CONSTANTS.PULSE_DURATION) {
+            player.isPulsing = false;
+          }
+        }
+        
+        // Check if collapse animation should end
+        if (player.isCollapsing) {
+          const collapseElapsed = now - player.collapseStartTime;
+          if (collapseElapsed > GAME_CONSTANTS.COLLAPSE_DURATION) {
+            player.isCollapsing = false;
+          }
+        }
       }
     });
   }
