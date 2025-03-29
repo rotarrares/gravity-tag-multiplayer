@@ -17,22 +17,62 @@ const Game = ({ username, roomId, playerId, onExitGame }) => {
   const [latestLeave, setLatestLeave] = useState(null);
   const [pulseTriggered, setPulseTriggered] = useState(null);
   const [collapseTriggered, setCollapseTriggered] = useState(null);
+  const [loadingError, setLoadingError] = useState(null);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
   
   // Key state tracking
   const keysPressed = useRef({});
   const lastDirection = useRef({ x: 0, y: 0 });
   
+  // Setup a loading timeout
+  useEffect(() => {
+    // If game constants aren't set after 15 seconds, show a timeout message
+    const timer = setTimeout(() => {
+      if (!gameConstants) {
+        setLoadingTimeout(true);
+      }
+    }, 15000);
+    
+    return () => clearTimeout(timer);
+  }, [gameConstants]);
+
+  // Request game constants on component mount if not already set
+  useEffect(() => {
+    if (!socket || gameConstants) return;
+    
+    console.log('Requesting game constants for roomId:', roomId);
+    socket.emit('requestGameConstants', { roomId });
+  }, [socket, roomId, gameConstants]);
+  
   useEffect(() => {
     if (!socket) return;
     
+    console.log('Setting up event listeners with socket ID:', socket.id);
+    
     // Handle game state updates
     const handleGameState = (state) => {
+      console.log('Game state update received');
       setGameState(state);
     };
     
     // Handle room joined event
     const handleRoomJoined = (data) => {
-      setGameConstants(data.gameConstants);
+      console.log('Room joined event received:', data);
+      if (data && data.gameConstants) {
+        console.log('Game constants received:', data.gameConstants);
+        setGameConstants(data.gameConstants);
+      } else {
+        console.error('Missing game constants in roomJoined event');
+        setLoadingError('Missing game data. Please try again.');
+      }
+    };
+    
+    // Handle direct game constants response
+    const handleGameConstants = (data) => {
+      console.log('Direct game constants received:', data);
+      if (data) {
+        setGameConstants(data);
+      }
     };
     
     // Handle player joined event
@@ -59,13 +99,30 @@ const Game = ({ username, roomId, playerId, onExitGame }) => {
       setTimeout(() => setCollapseTriggered(null), 3000);
     };
     
+    // Handle errors
+    const handleError = (error) => {
+      console.error('Socket error:', error);
+      setLoadingError(`Error: ${error.message || 'Unknown error'}`);
+    };
+    
     // Set up event listeners
     socket.on('gameState', handleGameState);
     socket.on('roomJoined', handleRoomJoined);
+    socket.on('gameConstants', handleGameConstants);
     socket.on('playerJoined', handlePlayerJoined);
     socket.on('playerLeft', handlePlayerLeft);
     socket.on('pulseTriggered', handlePulseTriggered);
     socket.on('collapseTriggered', handleCollapseTriggered);
+    socket.on('error', handleError);
+    
+    // Emit a join room event to re-establish connection if needed
+    if (roomId && playerId) {
+      console.log('Re-joining room:', roomId);
+      socket.emit('joinGame', {
+        username,
+        roomId
+      });
+    }
     
     // Set up keyboard event listeners for movement
     const handleKeyDown = (e) => {
@@ -123,15 +180,17 @@ const Game = ({ username, roomId, playerId, onExitGame }) => {
     return () => {
       socket.off('gameState', handleGameState);
       socket.off('roomJoined', handleRoomJoined);
+      socket.off('gameConstants', handleGameConstants);
       socket.off('playerJoined', handlePlayerJoined);
       socket.off('playerLeft', handlePlayerLeft);
       socket.off('pulseTriggered', handlePulseTriggered);
       socket.off('collapseTriggered', handleCollapseTriggered);
+      socket.off('error', handleError);
       
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [socket, roomId]);
+  }, [socket, roomId, username, playerId]);
   
   // Convert players object to array for leaderboard
   useEffect(() => {
@@ -165,12 +224,50 @@ const Game = ({ username, roomId, playerId, onExitGame }) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
   
+  // Force proceed with default constants if needed (as a fallback)
+  const handleForceStart = () => {
+    // Default game constants if server doesn't provide them
+    const defaultConstants = {
+      WORLD_WIDTH: 1200,
+      WORLD_HEIGHT: 800,
+      PLAYER_RADIUS: 20,
+      PLAYER_SPEED: 3,
+      GRAVITY_MAX: 5,
+      GRAVITY_RANGE: 200,
+      PULSE_COOLDOWN: 5000,
+      COLLAPSE_COOLDOWN: 15000,
+      PULSE_DURATION: 1000,
+      COLLAPSE_DURATION: 3000,
+      TICK_RATE: 16,
+      HAZARD_COUNT: 5
+    };
+    
+    setGameConstants(defaultConstants);
+  };
+  
   // Check if game constants have been loaded
   if (!gameConstants) {
     return (
       <div className="loading-screen">
         <div className="loading-spinner"></div>
         <p>Loading game...</p>
+        
+        {loadingError && (
+          <div className="loading-error">
+            <p>{loadingError}</p>
+            <button onClick={handleExitGame}>Go Back</button>
+          </div>
+        )}
+        
+        {loadingTimeout && !loadingError && (
+          <div className="loading-timeout">
+            <p>Game is taking longer than expected to load.</p>
+            <div className="loading-actions">
+              <button onClick={handleExitGame}>Go Back</button>
+              <button onClick={handleForceStart}>Start Anyway</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
