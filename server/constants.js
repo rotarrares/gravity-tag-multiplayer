@@ -8,8 +8,8 @@ const GAME_CONSTANTS = {
   // Player settings
   PLAYER_RADIUS: 20,
   MAX_SPEED: 5,
-  BASE_GRAVITY_STRENGTH: 250, // Reduced further for a gentler effect over larger range
-  GRAVITY_RANGE: 1800, // Tripled from 600 to 1800 for extremely wide area of effect
+  BASE_GRAVITY_STRENGTH: 300,
+  GRAVITY_RANGE: 1800, // Tripled from 600 to 1800 for much wider area of effect
   PULSE_STRENGTH_MULTIPLIER: 8,
   PULSE_DURATION: 1000, // ms
   PULSE_COOLDOWN: 10000, // ms
