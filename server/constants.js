@@ -35,12 +35,14 @@ const GAME_CONSTANTS = {
   BLACK_HOLE_STRENGTH: 1200, // Increased from 600 to 1200
   BLACK_HOLE_PENALTY: 5,
   BLACK_HOLE_MOVE_SPEED: 0.3, // New constant for black hole movement speed
+  BLACK_HOLE_COUNT: 4, // Number of black holes to create per room
   NEBULA_RADIUS: 150,
   NEBULA_GRAVITY_MODIFIER: 0.5,
   NEBULA_MOVE_SPEED: 0.2, // New constant for nebula movement speed
+  NEBULA_COUNT: 4, // Number of nebulae to create per room
   COMET_RADIUS: 15,
   COMET_SPEED: 8,
-  COMET_SPAWN_INTERVAL: 30000, // ms
+  COMET_SPAWN_INTERVAL: 15000, // Reduced from 30000 to 15000 ms (twice as frequent)
   
   // Game flow
   ROUND_DURATION: 180000, // 3 minutes in ms
