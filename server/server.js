@@ -37,11 +37,11 @@ const io = new Server(server, {
   maxHttpBufferSize: 1e8,
   // Enable socket.io compression
   perMessageDeflate: {
-    threshold: 1024, // Only compress messages larger than this size
+    threshold: 1024,
     zlibDeflateOptions: {
-      chunkSize: 16 * 1024, // Optimize for WebSocket packet size
-      memLevel: 7, // Balance between speed and compression
-      level: 3 // Moderate compression for best performance
+      chunkSize: 16 * 1024,
+      memLevel: 7,
+      level: 3
     }
   }
 });
@@ -66,22 +66,13 @@ setInterval(() => {
   // Broadcast game state to all clients using delta compression
   Object.entries(gameManager.rooms).forEach(([roomId, room]) => {
     try {
-      // Every 10th update (or about 0.5 seconds), send full state to ensure consistency
-      const now = Date.now();
-      const shouldSendFullState = now % 500 < GAME_CONSTANTS.TICK_RATE;
+      // Send full state only for new players, otherwise use deltas
+      // We'll drop the periodic full updates since they're causing visual issues
+      const deltaState = gameManager.generateDeltaState(roomId);
       
-      if (shouldSendFullState) {
-        // Send full state occasionally to ensure clients are synced
-        const fullState = gameManager.generateFullState(roomId);
-        io.to(roomId).emit('gameState', fullState);
-      } else {
-        // Generate delta state for more efficient updates
-        const deltaState = gameManager.generateDeltaState(roomId);
-        
-        // Only emit if there are actual changes to send
-        if (Object.keys(deltaState.players).length > 0 || deltaState.hazards.length > 0) {
-          io.to(roomId).emit('gameState', deltaState);
-        }
+      // Only emit if there are actual changes to send
+      if (Object.keys(deltaState.players).length > 0 || deltaState.hazards.length > 0) {
+        io.to(roomId).emit('gameState', deltaState);
       }
       
       // Always send time remaining as it's always changing
@@ -216,15 +207,11 @@ io.on('connection', (socket) => {
     if (gameManager.rooms[roomId]) {
       const success = gameManager.triggerPlayerPulse(roomId, socket.id);
       if (success) {
-        // Make sure to broadcast this to all players immediately
-        io.to(roomId).emit('pulseTriggered', { playerId: socket.id });
-        
-        // Also send an immediate gameState update to ensure the client sees the change
-        const player = gameManager.rooms[roomId].players[socket.id];
-        io.to(roomId).emit('playerPulsing', { 
-          playerId: socket.id, 
-          isPulsing: true,
-          energy: player.energy
+        // Make sure to broadcast this to all players immediately as a one-time event
+        // Don't send continuous updates
+        io.to(roomId).emit('pulseTriggered', { 
+          playerId: socket.id,
+          timestamp: Date.now() // Add timestamp to ensure it's seen as a new event
         });
       }
     }
@@ -237,15 +224,11 @@ io.on('connection', (socket) => {
       const success = gameManager.triggerPlayerCollapse(roomId, socket.id);
       console.log(`Collapse success: ${success}`);
       if (success) {
-        // Make sure to broadcast this to all players immediately
-        io.to(roomId).emit('collapseTriggered', { playerId: socket.id });
-        
-        // Also send an immediate gameState update to ensure the client sees the change
-        const player = gameManager.rooms[roomId].players[socket.id];
-        io.to(roomId).emit('playerCollapsing', { 
-          playerId: socket.id, 
-          isCollapsing: true,
-          energy: player.energy
+        // Make sure to broadcast this to all players immediately as a one-time event
+        // Don't send continuous updates
+        io.to(roomId).emit('collapseTriggered', { 
+          playerId: socket.id,
+          timestamp: Date.now() // Add timestamp to ensure it's seen as a new event
         });
       }
     }
