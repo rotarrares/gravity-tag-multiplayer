@@ -1,4 +1,20 @@
 const { GAME_CONSTANTS } = require('./constants');
+const { ObjectPool } = require('./objectPool');
+
+// Object pools for entity types
+const cometPool = new ObjectPool(Object, 20, (comet) => {
+  // Reset comet properties
+  comet.type = 'comet';
+  comet.x = 0;
+  comet.y = 0;
+  comet.velocityX = 0;
+  comet.velocityY = 0;
+  comet.radius = GAME_CONSTANTS.COMET_RADIUS;
+  return comet;
+});
+
+// Track objects to prevent garbage collection spikes
+const activeEntities = new Set();
 
 // Helper function to create a new player
 function createPlayer(id, username) {
@@ -35,10 +51,18 @@ function distance(x1, y1, x2, y2) {
   return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
 }
 
+// Helper function to calculate squared distance (more efficient)
+function distanceSquared(x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  return dx * dx + dy * dy;
+}
+
 // Generate a position that's sufficiently far from existing hazards
 function generateSpreadOutPosition(existingHazards, minDistance, radius) {
   // Ensure a good minimum distance
   const minimumDistance = minDistance || Math.max(GAME_CONSTANTS.ARENA_WIDTH, GAME_CONSTANTS.ARENA_HEIGHT) / 10;
+  const minDistanceSquared = minimumDistance * minimumDistance;
   
   // Try up to 50 times to find a good position
   for (let attempts = 0; attempts < 50; attempts++) {
@@ -49,8 +73,9 @@ function generateSpreadOutPosition(existingHazards, minDistance, radius) {
     // Check if this position is far enough from all existing hazards
     let isFarEnough = true;
     for (const hazard of existingHazards) {
-      const dist = distance(x, y, hazard.x, hazard.y);
-      if (dist < minimumDistance + hazard.radius + radius) {
+      const distSquared = distanceSquared(x, y, hazard.x, hazard.y);
+      const minSeparation = minimumDistance + hazard.radius + radius;
+      if (distSquared < minSeparation * minSeparation) {
         isFarEnough = false;
         break;
       }
@@ -95,25 +120,35 @@ function createNebula(existingHazards = []) {
   };
 }
 
-// Helper function to create a comet hazard
+// Helper function to create a comet hazard (now using object pooling)
 function createComet() {
+  // Get a comet from the pool
+  const comet = cometPool.get();
+  
   // Start from edge of arena
   const startFromTop = Math.random() > 0.5;
-  const x = Math.random() * GAME_CONSTANTS.ARENA_WIDTH;
-  const y = startFromTop ? 0 : GAME_CONSTANTS.ARENA_HEIGHT;
+  comet.x = Math.random() * GAME_CONSTANTS.ARENA_WIDTH;
+  comet.y = startFromTop ? 0 : GAME_CONSTANTS.ARENA_HEIGHT;
   
   // Angle between 30 and 150 degrees if from top, or 210 and 330 if from bottom
   const angleRange = startFromTop ? [Math.PI/6, 5*Math.PI/6] : [7*Math.PI/6, 11*Math.PI/6];
   const angle = angleRange[0] + Math.random() * (angleRange[1] - angleRange[0]);
   
-  return {
-    type: 'comet',
-    x,
-    y,
-    radius: GAME_CONSTANTS.COMET_RADIUS,
-    velocityX: Math.cos(angle) * GAME_CONSTANTS.COMET_SPEED,
-    velocityY: Math.sin(angle) * GAME_CONSTANTS.COMET_SPEED
-  };
+  comet.velocityX = Math.cos(angle) * GAME_CONSTANTS.COMET_SPEED;
+  comet.velocityY = Math.sin(angle) * GAME_CONSTANTS.COMET_SPEED;
+  
+  // Add to active entities set
+  activeEntities.add(comet);
+  
+  return comet;
+}
+
+// Release a comet back to the pool
+function releaseComet(comet) {
+  if (comet && comet.type === 'comet') {
+    activeEntities.delete(comet);
+    cometPool.release(comet);
+  }
 }
 
 // Function to generate distributed hazards for a room
@@ -138,5 +173,8 @@ module.exports = {
   createBlackHole,
   createNebula,
   createComet,
-  createDistributedHazards
+  releaseComet,
+  createDistributedHazards,
+  cometPool,
+  activeEntities
 };
