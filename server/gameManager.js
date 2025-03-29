@@ -60,7 +60,9 @@ class GameManager {
         username: player.username,
         isPulsing: false,
         isCollapsing: false,
-        energy: player.energy
+        energy: player.energy,
+        lastPulseTime: player.lastPulseTime,
+        lastCollapseTime: player.lastCollapseTime
       };
     }
   }
@@ -159,6 +161,9 @@ class GameManager {
       timeRemaining: room.timeRemaining
     };
     
+    // Current time for cooldown calculations
+    const now = Date.now();
+    
     // Calculate player deltas with special treatment for animation states
     for (const [playerId, player] of Object.entries(room.players)) {
       const prevPlayer = previousState.players[playerId];
@@ -173,16 +178,19 @@ class GameManager {
         isTagged: player.isTagged,
         score: player.score,
         username: player.username,
-        energy: player.energy
+        energy: player.energy,
+        // Always include timer information to display cooldowns
+        lastPulseTime: player.lastPulseTime,
+        lastCollapseTime: player.lastCollapseTime
       };
       
       // Special handling for animation states
-      // Only include pulse/collapse states in the update if they've just changed
-      // from false to true (starting), or if they were true and are now false (ending)
       if (!prevPlayer) {
         // New player, include everything
         playerUpdate.isPulsing = player.isPulsing;
         playerUpdate.isCollapsing = player.isCollapsing;
+        playerUpdate.pulseStartTime = player.pulseStartTime;
+        playerUpdate.collapseStartTime = player.collapseStartTime;
         hasChanges = true;
       } else {
         // Check for regular property changes
@@ -190,19 +198,23 @@ class GameManager {
             prevPlayer.y !== player.y || 
             prevPlayer.isTagged !== player.isTagged ||
             prevPlayer.score !== player.score ||
-            prevPlayer.energy !== player.energy) {
+            prevPlayer.energy !== player.energy ||
+            prevPlayer.lastPulseTime !== player.lastPulseTime ||
+            prevPlayer.lastCollapseTime !== player.lastCollapseTime) {
           hasChanges = true;
         }
         
         // Handle pulse state - only include if it's a transition
         if (prevPlayer.isPulsing !== player.isPulsing) {
           playerUpdate.isPulsing = player.isPulsing;
+          playerUpdate.pulseStartTime = player.pulseStartTime;
           hasChanges = true;
         }
         
         // Handle collapse state - only include if it's a transition
         if (prevPlayer.isCollapsing !== player.isCollapsing) {
           playerUpdate.isCollapsing = player.isCollapsing;
+          playerUpdate.collapseStartTime = player.collapseStartTime;
           hasChanges = true;
         }
       }
@@ -220,7 +232,11 @@ class GameManager {
           username: player.username,
           isPulsing: player.isPulsing,
           isCollapsing: player.isCollapsing,
-          energy: player.energy
+          energy: player.energy,
+          lastPulseTime: player.lastPulseTime,
+          lastCollapseTime: player.lastCollapseTime,
+          pulseStartTime: player.pulseStartTime,
+          collapseStartTime: player.collapseStartTime
         };
       }
     }
@@ -244,11 +260,26 @@ class GameManager {
     const room = this.rooms[roomId];
     if (!room) return null;
     
-    return {
-      players: room.players,
-      hazards: room.hazards,
+    // Create a deep copy to avoid modifying the original state
+    const fullState = {
+      players: {},
+      hazards: [...room.hazards],
       timeRemaining: room.timeRemaining
     };
+    
+    // Include all player data for each player
+    for (const [playerId, player] of Object.entries(room.players)) {
+      fullState.players[playerId] = {
+        ...player,
+        // Make sure we include timing information needed for cooldowns
+        lastPulseTime: player.lastPulseTime,
+        lastCollapseTime: player.lastCollapseTime,
+        pulseStartTime: player.pulseStartTime,
+        collapseStartTime: player.collapseStartTime
+      };
+    }
+    
+    return fullState;
   }
   
   // Main update loop for all game rooms
