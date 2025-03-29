@@ -1,7 +1,7 @@
 const { GAME_CONSTANTS } = require('./constants');
 const Physics = require('./physics');
 const HazardManager = require('./hazards');
-const { createBlackHole, createNebula } = require('./entities');
+const { createDistributedHazards } = require('./entities');
 
 // Game manager handles all game logic
 class GameManager {
@@ -19,11 +19,8 @@ class GameManager {
       lastCometSpawn: 0
     };
     
-    // Add initial hazards
-    this.rooms[roomId].hazards.push(createBlackHole());
-    this.rooms[roomId].hazards.push(createBlackHole());
-    this.rooms[roomId].hazards.push(createNebula());
-    this.rooms[roomId].hazards.push(createNebula());
+    // Add initial hazards (now using the distributed function)
+    this.rooms[roomId].hazards = createDistributedHazards();
     
     // Initialize direction for hazards
     for (const hazard of this.rooms[roomId].hazards) {
@@ -139,7 +136,7 @@ class GameManager {
       Physics.applyMovement(room);
       Physics.applyGravity(room);
       Physics.applyBlackHoles(room);
-      Physics.moveHazards(room); // Add the call to move hazards
+      Physics.moveHazards(room);
       
       // Update hazards
       HazardManager.updateComets(room);
@@ -171,12 +168,8 @@ class GameManager {
     room.timeRemaining = GAME_CONSTANTS.ROUND_DURATION;
     room.lastCometSpawn = 0;
     
-    // Reset hazards
-    room.hazards = [];
-    room.hazards.push(createBlackHole());
-    room.hazards.push(createBlackHole());
-    room.hazards.push(createNebula());
-    room.hazards.push(createNebula());
+    // Reset hazards with new distributed pattern
+    room.hazards = createDistributedHazards();
     
     // Initialize direction for hazards
     for (const hazard of room.hazards) {
