@@ -44,6 +44,11 @@ class GravityPhysics {
   
   // Apply force between two objects
   static applyGravityForce(player, otherPlayer, dist, room) {
+    // If players are extremely close, nullify gravity to prevent sticking together
+    if (dist < GAME_CONSTANTS.GRAVITY_PROXIMITY_THRESHOLD) {
+      return 0;
+    }
+    
     // Calculate gravity force - now with more extreme effect
     // Use power 1.8 instead of 2.0 for stronger long-range gravitational pull
     let force = otherPlayer.gravityStrength / Math.pow(dist, 1.8);
@@ -89,17 +94,30 @@ class GravityPhysics {
         
         // Apply gravity if within range
         if (dist < GAME_CONSTANTS.GRAVITY_RANGE && dist > 0) {
-          // Calculate and apply force
+          // Calculate and apply force - will be 0 if players are too close
           const force = this.applyGravityForce(player, otherPlayer, dist, room);
           
-          // Direction vector
-          const dx = (otherPlayer.x - player.x) / dist;
-          const dy = (otherPlayer.y - player.y) / dist;
+          if (force > 0) {
+            // Direction vector
+            const dx = (otherPlayer.x - player.x) / dist;
+            const dy = (otherPlayer.y - player.y) / dist;
+            
+            // Apply force to velocity with increased multiplier for stronger effects
+            const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 850; // Increased from 1000 to 850 for stronger effect
+            player.velocityX += dx * force * tickMultiplier;
+            player.velocityY += dy * force * tickMultiplier;
+          }
           
-          // Apply force to velocity with increased multiplier for stronger effects
-          const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 850; // Increased from 1000 to 850 for stronger effect
-          player.velocityX += dx * force * tickMultiplier;
-          player.velocityY += dy * force * tickMultiplier;
+          // Add a small separation force when players are too close to prevent sticking
+          if (dist < GAME_CONSTANTS.GRAVITY_PROXIMITY_THRESHOLD) {
+            const separationForce = 1.0 - (dist / GAME_CONSTANTS.GRAVITY_PROXIMITY_THRESHOLD);
+            const dx = (player.x - otherPlayer.x) / dist;
+            const dy = (player.y - otherPlayer.y) / dist;
+            
+            // Apply separation force - stronger as players get closer
+            player.velocityX += dx * separationForce * 0.4;
+            player.velocityY += dy * separationForce * 0.4;
+          }
         }
       }
     }
