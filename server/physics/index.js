@@ -20,6 +20,7 @@ class Physics {
   static handleBlackHoleCollision = HazardPhysics.handleBlackHoleCollision;
   static handleCometCollision = HazardPhysics.handleCometCollision;
   static isInNebula = HazardPhysics.isInNebula;
+  static moveHazards = HazardPhysics.moveHazards; // Add the new hazard movement function
   
   // Collision physics
   static circleCollision = CollisionPhysics.circleCollision;
