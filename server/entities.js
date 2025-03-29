@@ -3,7 +3,7 @@ const { ObjectPool } = require('./objectPool');
 
 // Object pools for entity types
 const cometPool = new ObjectPool(Object, 20, (comet) => {
-  // Reset comet properties
+  // Always ensure the comet has a proper type
   comet.type = 'comet';
   comet.x = 0;
   comet.y = 0;
@@ -125,10 +125,14 @@ function createComet() {
   // Get a comet from the pool
   const comet = cometPool.get();
   
+  // Make sure the type is set correctly
+  comet.type = 'comet';
+  
   // Start from edge of arena
   const startFromTop = Math.random() > 0.5;
   comet.x = Math.random() * GAME_CONSTANTS.ARENA_WIDTH;
   comet.y = startFromTop ? 0 : GAME_CONSTANTS.ARENA_HEIGHT;
+  comet.radius = GAME_CONSTANTS.COMET_RADIUS;
   
   // Angle between 30 and 150 degrees if from top, or 210 and 330 if from bottom
   const angleRange = startFromTop ? [Math.PI/6, 5*Math.PI/6] : [7*Math.PI/6, 11*Math.PI/6];
