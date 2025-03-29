@@ -7,6 +7,7 @@ const JoinGame = ({ onJoinGame }) => {
   const [roomId, setRoomId] = useState('');
   const [isCreatingGame, setIsCreatingGame] = useState(true);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const { socket, isConnected } = useSocket();
 
   useEffect(() => {
@@ -14,15 +15,40 @@ const JoinGame = ({ onJoinGame }) => {
 
     // Handle successful room join
     const handleRoomJoined = (data) => {
+      console.log('Room joined successfully:', data);
+      setIsLoading(false);
       onJoinGame(username, data.roomId, data.playerId);
     };
 
+    // Error handling
+    const handleError = (error) => {
+      console.error('Server error:', error);
+      setError(`Server error: ${error.message || 'Unknown error'}`);
+      setIsLoading(false);
+    };
+
     socket.on('roomJoined', handleRoomJoined);
+    socket.on('error', handleError);
 
     return () => {
       socket.off('roomJoined', handleRoomJoined);
+      socket.off('error', handleError);
     };
   }, [socket, username, onJoinGame]);
+
+  // Set a timeout for joining game
+  useEffect(() => {
+    if (isLoading) {
+      const timeout = setTimeout(() => {
+        if (isLoading) {
+          setIsLoading(false);
+          setError('Connection timeout. Please try again.');
+        }
+      }, 10000); // 10 second timeout
+
+      return () => clearTimeout(timeout);
+    }
+  }, [isLoading]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -38,12 +64,18 @@ const JoinGame = ({ onJoinGame }) => {
     }
 
     if (!isConnected) {
-      setError('Not connected to server. Please try again.');
+      setError('Not connected to server. Please try again or refresh the page.');
       return;
     }
 
-    // Clear any previous errors
+    // Clear any previous errors and set loading state
     setError('');
+    setIsLoading(true);
+    
+    console.log('Attempting to join/create game with:', {
+      username: username.trim(),
+      roomId: isCreatingGame ? null : roomId.trim()
+    });
 
     // Join or create game
     socket.emit('joinGame', {
@@ -85,6 +117,7 @@ const JoinGame = ({ onJoinGame }) => {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter your cosmic name"
               maxLength={15}
+              disabled={isLoading}
             />
           </div>
 
@@ -97,19 +130,29 @@ const JoinGame = ({ onJoinGame }) => {
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value)}
                 placeholder="Enter room ID to join"
+                disabled={isLoading}
               />
             </div>
           )}
 
           {error && <div className="error-message">{error}</div>}
 
-          <button type="submit" className="submit-button" disabled={!isConnected}>
-            {isCreatingGame ? 'Create Game' : 'Join Game'}
+          <button 
+            type="submit" 
+            className="submit-button" 
+            disabled={!isConnected || isLoading}
+          >
+            {isLoading 
+              ? 'Connecting...' 
+              : isCreatingGame 
+                ? 'Create Game' 
+                : 'Join Game'
+            }
           </button>
 
           {!isConnected && (
             <div className="connection-status">
-              Connecting to server...
+              Connecting to server... If this persists, try refreshing the page.
             </div>
           )}
         </form>
