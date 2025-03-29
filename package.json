@@ -14,7 +14,12 @@
     "node": "18.x"
   },
   "dependencies": {
-    "concurrently": "^7.6.0"
+    "concurrently": "^7.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"
