@@ -36,8 +36,13 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
     // Use easing function for smoother animation
     const easedProgress = easeOutQuad(pulseProgress);
     
-    // Expand and fade out
-    const pulseRadius = gameConstants.GRAVITY_RANGE * easedProgress * 0.7; // Size relative to gravity range
+    // Expand and fade out - limit to visible screen area
+    const screenSize = Math.max(ctx.canvas.width, ctx.canvas.height);
+    const maxVisibleRadius = screenSize * 0.6; // 60% of screen diagonal
+    const fullGravityRange = Math.min(gameConstants.GRAVITY_RANGE, maxVisibleRadius);
+    
+    // Calculate pulse wave radius - smaller proportion of the larger gravity range
+    const pulseRadius = fullGravityRange * easedProgress * 0.3;
     const pulseOpacity = 1 - easedProgress;
     
     ctx.save();
@@ -67,14 +72,23 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
     ctx.strokeStyle = `${baseColor} ${pulseOpacity * 0.7})`;
     ctx.stroke();
     
-    // Draw large translucent field to show gravity range
+    // Draw partial visible range indication
+    const visibleRange = Math.min(fullGravityRange, maxVisibleRadius);
     ctx.beginPath();
-    safeArc(ctx, x, y, gameConstants.GRAVITY_RANGE); // Full gravity range
+    safeArc(ctx, x, y, visibleRange * 0.5); // Show half the range
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 8]); // Dashed line for the gravity range
-    ctx.strokeStyle = `${baseColor} ${0.3 * pulseOpacity})`;
+    ctx.strokeStyle = `${baseColor} ${0.4 * pulseOpacity})`;
     ctx.stroke();
-    ctx.setLineDash([]); // Reset line dash
+    
+    // Show text with actual range
+    ctx.font = "14px Arial";
+    ctx.fillStyle = `${baseColor} ${0.7 * pulseOpacity})`;
+    ctx.textAlign = "center";
+    ctx.fillText(`Gravity Range: ${Math.round(gameConstants.GRAVITY_RANGE)}`, x, y + visibleRange * 0.5 + 20);
+    
+    // Reset line dash
+    ctx.setLineDash([]);
     
     // Add energy particles in the wave (larger, more visible)
     const particleCount = 18; // More particles
@@ -94,7 +108,7 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
     }
     
     // Add streaks radiating outward for more visual impact
-    const streakCount = 12;
+    const streakCount = 24; // More streaks
     for (let i = 0; i < streakCount; i++) {
       const angle = (i / streakCount) * Math.PI * 2;
       const innerRadius = pulseRadius * 0.2;
