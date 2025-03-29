@@ -111,10 +111,9 @@ class HazardPhysics {
     return distSquared <= hazard.radius * hazard.radius;
   }
   
-  // Move hazards slowly across the map
+  // Move hazards across the map with more dynamic and unpredictable patterns
   static moveHazards(room) {
-    // Object pool for vector calculations to reduce garbage collection
-    const direction = { x: 0, y: 0 };
+    const now = Date.now();
     
     for (const hazard of room.hazards) {
       if (hazard.type === 'blackHole' || hazard.type === 'nebula') {
@@ -123,42 +122,66 @@ class HazardPhysics {
           GAME_CONSTANTS.BLACK_HOLE_MOVE_SPEED : 
           GAME_CONSTANTS.NEBULA_MOVE_SPEED;
         
-        // Generate a random direction change occasionally
-        const randomChance = hazard.type === 'blackHole' ? 0.01 : 0.005;
-        
-        if (Math.random() < randomChance) {
-          hazard.directionX = Math.random() * 2 - 1;
-          hazard.directionY = Math.random() * 2 - 1;
-          
-          // Normalize direction vector - reuse calculated magnitude
-          const magnitude = Math.sqrt(hazard.directionX * hazard.directionX + hazard.directionY * hazard.directionY);
-          const invMagnitude = 1 / magnitude;
-          hazard.directionX *= invMagnitude;
-          hazard.directionY *= invMagnitude;
+        // Initialize hazard-specific properties if not present
+        if (!hazard.lastDirectionChange) {
+          hazard.lastDirectionChange = now;
+          hazard.directionChangeInterval = 3000 + Math.random() * 4000; // 3-7 seconds
         }
         
-        // If the hazard doesn't have a direction yet, initialize it
-        if (!hazard.directionX) {
-          hazard.directionX = Math.random() * 2 - 1;
-          hazard.directionY = Math.random() * 2 - 1;
+        // More frequent random direction changes
+        const randomChance = hazard.type === 'blackHole' ? 0.03 : 0.02; // Increased from 0.01/0.005
+        
+        // Check if it's time for a scheduled direction change
+        const timeForChange = now - hazard.lastDirectionChange > hazard.directionChangeInterval;
+        
+        if (Math.random() < randomChance || timeForChange) {
+          // Generate new direction with bias toward the current direction (for smoother changes)
+          if (hazard.directionX && hazard.directionY) {
+            // Add some variation while keeping general direction
+            hazard.directionX += (Math.random() * 0.6 - 0.3); // -0.3 to +0.3 change
+            hazard.directionY += (Math.random() * 0.6 - 0.3);
+          } else {
+            // First initialization or complete change
+            hazard.directionX = Math.random() * 2 - 1;
+            hazard.directionY = Math.random() * 2 - 1;
+          }
           
-          // Normalize direction vector - reuse calculated magnitude
+          // Normalize direction vector for consistent speed
           const magnitude = Math.sqrt(hazard.directionX * hazard.directionX + hazard.directionY * hazard.directionY);
-          const invMagnitude = 1 / magnitude;
-          hazard.directionX *= invMagnitude;
-          hazard.directionY *= invMagnitude;
+          hazard.directionX /= magnitude;
+          hazard.directionY /= magnitude;
+          
+          // Update timing info
+          hazard.lastDirectionChange = now;
+          // Randomize the next change interval (2-6 seconds)
+          hazard.directionChangeInterval = 2000 + Math.random() * 4000;
         }
         
-        // Move the hazard
+        // Move the hazard with the current direction and speed
         hazard.x += hazard.directionX * moveSpeed;
         hazard.y += hazard.directionY * moveSpeed;
         
-        // Bounce off walls
+        // Bounce off walls with slight direction variation for more natural movement
         if (hazard.x < hazard.radius || hazard.x > GAME_CONSTANTS.ARENA_WIDTH - hazard.radius) {
           hazard.directionX *= -1;
+          // Add a small y-direction change for more varied bounces
+          hazard.directionY += (Math.random() * 0.4 - 0.2);
+          
+          // Normalize direction after changes
+          const magnitude = Math.sqrt(hazard.directionX * hazard.directionX + hazard.directionY * hazard.directionY);
+          hazard.directionX /= magnitude;
+          hazard.directionY /= magnitude;
         }
+        
         if (hazard.y < hazard.radius || hazard.y > GAME_CONSTANTS.ARENA_HEIGHT - hazard.radius) {
           hazard.directionY *= -1;
+          // Add a small x-direction change for more varied bounces
+          hazard.directionX += (Math.random() * 0.4 - 0.2);
+          
+          // Normalize direction after changes
+          const magnitude = Math.sqrt(hazard.directionX * hazard.directionX + hazard.directionY * hazard.directionY);
+          hazard.directionX /= magnitude;
+          hazard.directionY /= magnitude;
         }
       }
     }
