@@ -19,29 +19,38 @@ class CollisionPhysics {
     const now = Date.now();
     const players = Object.values(room.players);
     
-    for (const player of players) {
-      // Skip tagged players or those with invulnerability
-      if (player.isTagged || now - player.lastTaggedTime < GAME_CONSTANTS.TAG_INVULNERABILITY) {
-        continue;
-      }
-      
-      // Get nearby players only
-      const nearbyPlayers = room.spatialGrid.getObjectsInRadius(
-        player.x, player.y, GAME_CONSTANTS.TAG_RADIUS + GAME_CONSTANTS.PLAYER_RADIUS
+    // Find tagged players who can tag others
+    const taggedPlayers = players.filter(p => 
+      p.isTagged && now - p.lastTaggedTime >= GAME_CONSTANTS.TAG_INVULNERABILITY
+    );
+    
+    // For each tagged player, look for nearby untagged players to tag
+    for (const taggedPlayer of taggedPlayers) {
+      // Get nearby untagged players only
+      const nearbyUntaggedPlayers = room.spatialGrid.getObjectsInRadius(
+        taggedPlayer.x, taggedPlayer.y, GAME_CONSTANTS.TAG_RADIUS + GAME_CONSTANTS.PLAYER_RADIUS
       ).filter(obj => 
-        obj !== player && 
+        obj !== taggedPlayer && 
         obj.id !== undefined && // Make sure it's a player
-        !obj.isTagged // Skip already tagged players
+        !obj.isTagged // Only consider untagged players
       );
       
       // Check for tagging
-      for (const otherPlayer of nearbyPlayers) {
+      for (const untaggedPlayer of nearbyUntaggedPlayers) {
         if (this.circleCollision(
-          player.x, player.y, GAME_CONSTANTS.TAG_RADIUS,
-          otherPlayer.x, otherPlayer.y, GAME_CONSTANTS.PLAYER_RADIUS
+          taggedPlayer.x, taggedPlayer.y, GAME_CONSTANTS.TAG_RADIUS,
+          untaggedPlayer.x, untaggedPlayer.y, GAME_CONSTANTS.PLAYER_RADIUS
         )) {
-          this.tagPlayer(player, otherPlayer, now);
-          break;
+          this.tagPlayer(untaggedPlayer, taggedPlayer, now);
+          // Emit a tagging event through the room for visual feedback
+          if (room.emitEvent) {
+            room.emitEvent('playerTagged', { 
+              taggerId: taggedPlayer.id, 
+              taggedId: untaggedPlayer.id,
+              timestamp: now
+            });
+          }
+          break; // Only tag one player at a time
         }
       }
     }
@@ -60,24 +69,25 @@ class CollisionPhysics {
     const now = Date.now();
     const players = Object.values(room.players);
     
-    for (const player of players) {
-      // Skip tagged players or those with invulnerability
-      if (player.isTagged || now - player.lastTaggedTime < GAME_CONSTANTS.TAG_INVULNERABILITY) {
+    // Find tagged players that can tag others
+    for (const taggedPlayer of players) {
+      // Skip untagged players or those with invulnerability
+      if (!taggedPlayer.isTagged || now - taggedPlayer.lastTaggedTime < GAME_CONSTANTS.TAG_INVULNERABILITY) {
         continue;
       }
       
-      for (const otherPlayer of players) {
-        // Skip self or tagged players
-        if (player.id === otherPlayer.id || otherPlayer.isTagged) {
+      for (const untaggedPlayer of players) {
+        // Skip self or already tagged players
+        if (taggedPlayer.id === untaggedPlayer.id || untaggedPlayer.isTagged) {
           continue;
         }
         
         // Check if in tagging range
         if (this.circleCollision(
-          player.x, player.y, GAME_CONSTANTS.TAG_RADIUS,
-          otherPlayer.x, otherPlayer.y, GAME_CONSTANTS.PLAYER_RADIUS
+          taggedPlayer.x, taggedPlayer.y, GAME_CONSTANTS.TAG_RADIUS,
+          untaggedPlayer.x, untaggedPlayer.y, GAME_CONSTANTS.PLAYER_RADIUS
         )) {
-          this.tagPlayer(player, otherPlayer, now);
+          this.tagPlayer(untaggedPlayer, taggedPlayer, now);
           break;
         }
       }
@@ -93,6 +103,8 @@ class CollisionPhysics {
     player.lastTaggedTime = now;
     player.score -= GAME_CONSTANTS.TAGGED_POINTS_LOST;
     tagger.score += GAME_CONSTANTS.TAG_POINTS;
+    
+    console.log(`Player ${player.username || player.id} was tagged by ${tagger.username || tagger.id}`);
   }
   
   // Check if only one player is untagged and award bonus
@@ -113,6 +125,7 @@ class CollisionPhysics {
       if (!lastUntagged.wasLastUntagged) {
         lastUntagged.wasLastUntagged = true;
         lastUntagged.score += 10; // Bonus for being last untagged
+        console.log(`Player ${lastUntagged.username || lastUntagged.id} is the last untagged player!`);
       }
     }
   }
