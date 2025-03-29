@@ -27,13 +27,26 @@ class GravityPhysics {
     if (player.isCollapsing) {
       const collapseElapsed = Date.now() - player.collapseStartTime;
       if (collapseElapsed <= GAME_CONSTANTS.COLLAPSE_DURATION) {
-        if (collapseElapsed < GAME_CONSTANTS.COLLAPSE_DURATION / 2) {
-          // First half: gravity decreases
-          gravityStrength *= (1 - collapseElapsed / (GAME_CONSTANTS.COLLAPSE_DURATION / 2.0));
-        } else {
-          // Second half: gravity explodes
-          const explosionPhase = (collapseElapsed - GAME_CONSTANTS.COLLAPSE_DURATION / 2) / (GAME_CONSTANTS.COLLAPSE_DURATION / 2);
-          gravityStrength *= GAME_CONSTANTS.COLLAPSE_STRENGTH_MULTIPLIER * explosionPhase * 2.5;
+        // Adjusted to create a more dramatic and visible collapse effect
+        
+        // First phase (40% of duration): gravity decreases more gradually
+        if (collapseElapsed < GAME_CONSTANTS.COLLAPSE_DURATION * 0.4) {
+          // Smoother decrease from 100% to 10% during first phase
+          const phase1Progress = collapseElapsed / (GAME_CONSTANTS.COLLAPSE_DURATION * 0.4);
+          gravityStrength *= (1 - 0.9 * phase1Progress);
+        } 
+        // Second phase (60% of duration): explosive gravity increase
+        else {
+          // Calculate progress within the second phase
+          const phase2Progress = (collapseElapsed - GAME_CONSTANTS.COLLAPSE_DURATION * 0.4) / 
+                                (GAME_CONSTANTS.COLLAPSE_DURATION * 0.6);
+          
+          // More dramatic curve with slower start and powerful finish
+          // Using a cubic ease-in function for more impact
+          const explosionFactor = phase2Progress * phase2Progress * phase2Progress;
+          
+          // Increased multiplier for more dramatic effect
+          gravityStrength *= GAME_CONSTANTS.COLLAPSE_STRENGTH_MULTIPLIER * explosionFactor * 3.0;
         }
       } else {
         player.isCollapsing = false;
