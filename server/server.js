@@ -66,8 +66,7 @@ setInterval(() => {
   // Broadcast game state to all clients using delta compression
   Object.entries(gameManager.rooms).forEach(([roomId, room]) => {
     try {
-      // Send full state only for new players, otherwise use deltas
-      // We'll drop the periodic full updates since they're causing visual issues
+      // Send delta state updates
       const deltaState = gameManager.generateDeltaState(roomId);
       
       // Only emit if there are actual changes to send
@@ -207,11 +206,15 @@ io.on('connection', (socket) => {
     if (gameManager.rooms[roomId]) {
       const success = gameManager.triggerPlayerPulse(roomId, socket.id);
       if (success) {
-        // Make sure to broadcast this to all players immediately as a one-time event
-        // Don't send continuous updates
+        // Get updated player data
+        const player = gameManager.rooms[roomId].players[socket.id];
+        
+        // Emit pulse event with timing information
         io.to(roomId).emit('pulseTriggered', { 
           playerId: socket.id,
-          timestamp: Date.now() // Add timestamp to ensure it's seen as a new event
+          timestamp: Date.now(),
+          pulseStartTime: player.pulseStartTime,
+          lastPulseTime: player.lastPulseTime
         });
       }
     }
@@ -224,12 +227,20 @@ io.on('connection', (socket) => {
       const success = gameManager.triggerPlayerCollapse(roomId, socket.id);
       console.log(`Collapse success: ${success}`);
       if (success) {
-        // Make sure to broadcast this to all players immediately as a one-time event
-        // Don't send continuous updates
+        // Get updated player data
+        const player = gameManager.rooms[roomId].players[socket.id];
+        
+        // Emit collapse event with timing information
         io.to(roomId).emit('collapseTriggered', { 
           playerId: socket.id,
-          timestamp: Date.now() // Add timestamp to ensure it's seen as a new event
+          timestamp: Date.now(),
+          collapseStartTime: player.collapseStartTime,
+          lastCollapseTime: player.lastCollapseTime
         });
+        
+        // Force an immediate game state update to ensure everybody sees the collapse
+        const fullState = gameManager.generateFullState(roomId);
+        io.to(roomId).emit('gameState', fullState);
       }
     }
   });
