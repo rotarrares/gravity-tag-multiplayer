@@ -23,7 +23,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// Better socket.io configuration for production
+// Better socket.io configuration for production with compression
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -34,7 +34,16 @@ const io = new Server(server, {
   pingTimeout: 30000,
   pingInterval: 25000,
   upgradeTimeout: 30000,
-  maxHttpBufferSize: 1e8
+  maxHttpBufferSize: 1e8,
+  // Enable socket.io compression
+  perMessageDeflate: {
+    threshold: 1024, // Only compress messages larger than this size
+    zlibDeflateOptions: {
+      chunkSize: 16 * 1024, // Optimize for WebSocket packet size
+      memLevel: 7, // Balance between speed and compression
+      level: 3 // Moderate compression for best performance
+    }
+  }
 });
 
 // Initialize game manager
@@ -42,7 +51,7 @@ const gameManager = new GameManager();
 
 // Function to generate a 4-character room code
 function generateRoomCode() {
-  const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed similar looking characters (I, O, 0, 1)
+  const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed similar looking characters
   let result = '';
   for (let i = 0; i < 4; i++) {
     result += characters.charAt(Math.floor(Math.random() * characters.length));
@@ -54,11 +63,18 @@ function generateRoomCode() {
 setInterval(() => {
   gameManager.update();
   
-  // Broadcast game state to all clients
+  // Broadcast game state to all clients using delta compression
   Object.entries(gameManager.rooms).forEach(([roomId, room]) => {
-    io.to(roomId).emit('gameState', {
-      players: room.players,
-      hazards: room.hazards,
+    // Generate delta state for more efficient updates
+    const deltaState = gameManager.generateDeltaState(roomId);
+    
+    // Only emit if there are actual changes to send
+    if (Object.keys(deltaState.players).length > 0 || deltaState.hazards.length > 0) {
+      io.to(roomId).emit('gameState', deltaState);
+    }
+    
+    // Always send time remaining as it's always changing
+    io.to(roomId).emit('timeUpdate', {
       timeRemaining: room.timeRemaining
     });
   });
@@ -100,6 +116,9 @@ io.on('connection', (socket) => {
       socket.join(targetRoomId);
       
       console.log(`Player ${username} (${socket.id}) joined room: ${targetRoomId}`);
+      
+      // Store room ID on the socket for quick reference
+      socket.roomId = targetRoomId;
       
       // Send room info to player
       socket.emit('roomJoined', { 
@@ -149,6 +168,19 @@ io.on('connection', (socket) => {
     }
   });
   
+  // Player client performance settings
+  socket.on('setPerformanceMode', ({ mode }) => {
+    const roomId = socket.roomId;
+    if (!roomId || !gameManager.rooms[roomId]) return;
+    
+    // Store performance mode preference on the socket
+    socket.performanceMode = mode;
+    console.log(`Player ${socket.id} set performance mode to: ${mode}`);
+    
+    // Respond with confirmation
+    socket.emit('performanceModeSet', { mode });
+  });
+  
   // Player movement
   socket.on('playerMove', (moveData) => {
     const { roomId, direction } = moveData;
@@ -190,6 +222,7 @@ io.on('connection', (socket) => {
         // Clean up empty rooms
         if (Object.keys(gameManager.rooms[roomId].players).length === 0) {
           delete gameManager.rooms[roomId];
+          delete gameManager.roomStates[roomId];
           console.log(`Deleted empty room: ${roomId}`);
         }
       }
