@@ -13,17 +13,18 @@ class GravityPhysics {
     // Base gravity strength with stillness multiplier
     let gravityStrength = GAME_CONSTANTS.BASE_GRAVITY_STRENGTH * stillnessMultiplier;
     
-    // Apply pulse multiplier if active
+    // Apply pulse multiplier if active - DOUBLED INTENSITY
     if (player.isPulsing) {
       const pulseElapsed = Date.now() - player.pulseStartTime;
       if (pulseElapsed <= GAME_CONSTANTS.PULSE_DURATION) {
-        gravityStrength *= GAME_CONSTANTS.PULSE_STRENGTH_MULTIPLIER;
+        // Double the pulse multiplier (24 instead of 12)
+        gravityStrength *= GAME_CONSTANTS.PULSE_STRENGTH_MULTIPLIER * 2.0;
       } else {
         player.isPulsing = false;
       }
     }
     
-    // Apply collapse effect if active
+    // Apply collapse effect if active - DOUBLED INTENSITY
     if (player.isCollapsing) {
       const collapseElapsed = Date.now() - player.collapseStartTime;
       if (collapseElapsed <= GAME_CONSTANTS.COLLAPSE_DURATION) {
@@ -35,7 +36,7 @@ class GravityPhysics {
           const phase1Progress = collapseElapsed / (GAME_CONSTANTS.COLLAPSE_DURATION * 0.4);
           gravityStrength *= (1 - 0.9 * phase1Progress);
         } 
-        // Second phase (60% of duration): explosive gravity increase
+        // Second phase (60% of duration): explosive gravity increase with DOUBLED INTENSITY
         else {
           // Calculate progress within the second phase
           const phase2Progress = (collapseElapsed - GAME_CONSTANTS.COLLAPSE_DURATION * 0.4) / 
@@ -45,8 +46,8 @@ class GravityPhysics {
           // Using a cubic ease-in function for more impact
           const explosionFactor = phase2Progress * phase2Progress * phase2Progress;
           
-          // Increased multiplier for more dramatic effect
-          gravityStrength *= GAME_CONSTANTS.COLLAPSE_STRENGTH_MULTIPLIER * explosionFactor * 3.0;
+          // Double the multiplier (50 instead of 25) and increase the effect scaling
+          gravityStrength *= GAME_CONSTANTS.COLLAPSE_STRENGTH_MULTIPLIER * 2.0 * explosionFactor * 3.0;
         }
       } else {
         player.isCollapsing = false;
