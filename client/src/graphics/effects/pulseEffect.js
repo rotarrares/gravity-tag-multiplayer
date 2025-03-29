@@ -23,7 +23,7 @@ const safeArc = (ctx, x, y, radius) => {
  */
 export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) => {
   // Basic validation
-  if (!ctx || !player || !gameConstants) return;
+  if (!ctx || !player) return;
 
   try {
     const x = player.x - cameraX;
@@ -37,7 +37,7 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
     const easedProgress = easeOutQuad(pulseProgress);
     
     // Expand and fade out
-    const pulseRadius = gameConstants.GRAVITY_RANGE * easedProgress * 1.8;
+    const pulseRadius = gameConstants.GRAVITY_RANGE * easedProgress * 0.7; // Size relative to gravity range
     const pulseOpacity = 1 - easedProgress;
     
     ctx.save();
@@ -46,29 +46,38 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
     const baseColor = player.isTagged ? 
       'rgba(255, 107, 107,' : 
       'rgba(81, 131, 245,';
+
+    // Draw core glow
+    ctx.beginPath();
+    safeArc(ctx, x, y, gameConstants.PLAYER_RADIUS * 1.8);
+    ctx.fillStyle = `${baseColor} ${pulseOpacity * 0.6})`;
+    ctx.fill();
     
-    // Main pulse wave
+    // Draw main pulse wave (thicker, more visible line)
     ctx.beginPath();
     safeArc(ctx, x, y, pulseRadius);
-    ctx.lineWidth = 4 * (1 - easedProgress);
+    ctx.lineWidth = 8; // Much thicker line for visibility
     ctx.strokeStyle = `${baseColor} ${pulseOpacity})`;
     ctx.stroke();
     
-    // Inner ring
+    // Secondary pulse wave (thinner)
     ctx.beginPath();
     safeArc(ctx, x, y, pulseRadius * 0.85);
-    ctx.lineWidth = 2 * (1 - easedProgress);
+    ctx.lineWidth = 3;
     ctx.strokeStyle = `${baseColor} ${pulseOpacity * 0.7})`;
     ctx.stroke();
     
-    // Add glow effect
+    // Draw large translucent field to show gravity range
     ctx.beginPath();
-    safeArc(ctx, x, y, pulseRadius * 0.7);
-    ctx.fillStyle = `${baseColor} ${pulseOpacity * 0.2})`;
-    ctx.fill();
+    safeArc(ctx, x, y, gameConstants.GRAVITY_RANGE); // Full gravity range
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 8]); // Dashed line for the gravity range
+    ctx.strokeStyle = `${baseColor} ${0.3 * pulseOpacity})`;
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset line dash
     
-    // Add energy particles in the wave
-    const particleCount = 12;
+    // Add energy particles in the wave (larger, more visible)
+    const particleCount = 18; // More particles
     for (let i = 0; i < particleCount; i++) {
       const angle = (i / particleCount) * Math.PI * 2;
       const distance = pulseRadius * (0.9 + Math.sin(angle * 3) * 0.1);
@@ -76,7 +85,7 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
       const particleX = x + Math.cos(angle) * distance;
       const particleY = y + Math.sin(angle) * distance;
       
-      const size = 3 * (1 - easedProgress);
+      const size = 6 * (1 - easedProgress * 0.5); // Larger particles that fade less
       
       ctx.beginPath();
       safeArc(ctx, particleX, particleY, size);
@@ -84,12 +93,12 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
       ctx.fill();
     }
     
-    // Add streaks radiating outward
-    const streakCount = 8;
+    // Add streaks radiating outward for more visual impact
+    const streakCount = 12;
     for (let i = 0; i < streakCount; i++) {
       const angle = (i / streakCount) * Math.PI * 2;
-      const innerRadius = pulseRadius * 0.4;
-      const outerRadius = pulseRadius * 0.95;
+      const innerRadius = pulseRadius * 0.2;
+      const outerRadius = pulseRadius * 1.1;
       
       const startX = x + Math.cos(angle) * innerRadius;
       const startY = y + Math.sin(angle) * innerRadius;
@@ -99,8 +108,26 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
       ctx.beginPath();
       ctx.moveTo(startX, startY);
       ctx.lineTo(endX, endY);
-      ctx.lineWidth = 2 * (1 - easedProgress);
-      ctx.strokeStyle = `${baseColor} ${pulseOpacity * 0.8})`;
+      ctx.lineWidth = 3; // Thicker streaks
+      ctx.strokeStyle = `${baseColor} ${pulseOpacity * 0.9})`;
+      ctx.stroke();
+    }
+    
+    // Add wispy effects around the perimeter
+    for (let i = 0; i < 24; i++) {
+      const angle1 = (i / 24) * Math.PI * 2;
+      const angle2 = ((i + 0.5) / 24) * Math.PI * 2;
+      
+      const x1 = x + Math.cos(angle1) * (pulseRadius * (0.95 + Math.random() * 0.1));
+      const y1 = y + Math.sin(angle1) * (pulseRadius * (0.95 + Math.random() * 0.1));
+      const x2 = x + Math.cos(angle2) * (pulseRadius * (1.05 + Math.random() * 0.1));
+      const y2 = y + Math.sin(angle2) * (pulseRadius * (1.05 + Math.random() * 0.1));
+      
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = `${baseColor} ${pulseOpacity * 0.7})`;
       ctx.stroke();
     }
     
@@ -112,9 +139,9 @@ export const renderPulseEffect = (ctx, player, cameraX, cameraY, gameConstants) 
     try {
       ctx.save();
       ctx.beginPath();
-      ctx.arc(player.x - cameraX, player.y - cameraY, gameConstants.GRAVITY_RANGE * 0.5, 0, Math.PI * 2);
-      ctx.strokeStyle = player.isTagged ? 'rgba(255, 107, 107, 0.7)' : 'rgba(81, 131, 245, 0.7)';
-      ctx.lineWidth = 4;
+      ctx.arc(player.x - cameraX, player.y - cameraY, gameConstants.GRAVITY_RANGE * 0.3, 0, Math.PI * 2);
+      ctx.strokeStyle = player.isTagged ? 'rgba(255, 107, 107, 0.8)' : 'rgba(81, 131, 245, 0.8)';
+      ctx.lineWidth = 8;
       ctx.stroke();
       ctx.restore();
     } catch (e) {
