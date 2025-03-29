@@ -21,7 +21,7 @@ class Physics {
     for (const player of players) {
       // Calculate how long the player has been standing still
       const stillTime = Date.now() - player.lastMoveTime;
-      const stillnessMultiplier = Math.min(4, 1 + stillTime / 800);
+      const stillnessMultiplier = Math.min(3.5, 1 + stillTime / 1000); // Slightly reduced from 4
       
       // Base gravity strength with stillness multiplier
       let gravityStrength = GAME_CONSTANTS.BASE_GRAVITY_STRENGTH * stillnessMultiplier;
@@ -66,11 +66,17 @@ class Physics {
         
         // Apply gravity if within range
         if (dist < GAME_CONSTANTS.GRAVITY_RANGE && dist > 0) {
-          // Calculate gravity force with enhanced inverse square law
-          let force = otherPlayer.gravityStrength / Math.pow(dist, 1.5);
+          // Calculate gravity force - now with cubic falloff (power of 1.8)
+          // This makes gravity gentler for longer distances but still effective close by
+          // Using power 1.8 instead of 1.5 to reduce intensity further
+          let force = otherPlayer.gravityStrength / Math.pow(dist, 1.8);
           
-          // Apply minimum force threshold to make gravity more perceptible
-          force = Math.max(force, 0.5);
+          // Apply a smaller minimum force 
+          force = Math.max(force, 0.25); // Reduced from 0.5
+          
+          // Apply distance attenuation - strongest at center, weaker at edges
+          const distanceFactor = 1 - (dist / GAME_CONSTANTS.GRAVITY_RANGE);
+          force *= Math.pow(distanceFactor, 0.7); // Gentle falloff curve
           
           // Check if either player is in a nebula
           for (const hazard of room.hazards) {
@@ -88,8 +94,8 @@ class Physics {
           const dx = (otherPlayer.x - player.x) / dist;
           const dy = (otherPlayer.y - player.y) / dist;
           
-          // Apply force to velocity
-          const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 800;
+          // Apply force to velocity with reduced tick multiplier
+          const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 900; // Further reduced from 800
           player.velocityX += dx * force * tickMultiplier;
           player.velocityY += dy * force * tickMultiplier;
         }
