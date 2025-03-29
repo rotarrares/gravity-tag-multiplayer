@@ -61,7 +61,20 @@ function generateRoomCode() {
 
 // Add event emitter for tagging events
 gameManager.setEventEmitter((roomId, eventName, data) => {
-  io.to(roomId).emit(eventName, data);
+  // Set up special event handlers
+  switch (eventName) {
+    case 'playerTagged':
+      console.log(`Player tagged in room ${roomId}: ${data.taggedId} ${data.reason ? '(' + data.reason + ')' : ''}`);
+      io.to(roomId).emit(eventName, data);
+      break;
+    case 'playerUntagged':
+      console.log(`Player untagged in room ${roomId}: ${data.playerId} ${data.reason ? '(' + data.reason + ')' : ''}`);
+      io.to(roomId).emit(eventName, data);
+      break;
+    default:
+      // Default event handling
+      io.to(roomId).emit(eventName, data);
+  }
 });
 
 // Set up regular game state updates
@@ -162,6 +175,7 @@ io.on('connection', (socket) => {
         // Notify room of initial tag
         io.to(targetRoomId).emit('playerTagged', {
           taggedId: randomPlayer.id,
+          reason: 'game_start',
           timestamp: Date.now()
         });
       }
