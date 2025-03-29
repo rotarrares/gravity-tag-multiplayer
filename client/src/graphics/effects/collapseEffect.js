@@ -13,6 +13,23 @@ const safeArc = (ctx, x, y, radius) => {
 };
 
 /**
+ * Safely create a radial gradient
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} x0 - Start X
+ * @param {number} y0 - Start Y
+ * @param {number} r0 - Start radius
+ * @param {number} x1 - End X
+ * @param {number} y1 - End Y
+ * @param {number} r1 - End radius
+ * @returns {CanvasGradient} The gradient object
+ */
+const safeRadialGradient = (ctx, x0, y0, r0, x1, y1, r1) => {
+  const safeR0 = Math.max(0.001, r0);
+  const safeR1 = Math.max(safeR0 + 0.001, r1); // Make sure r1 > r0
+  return ctx.createRadialGradient(x0, y0, safeR0, x1, y1, safeR1);
+};
+
+/**
  * Render a gravity collapse effect
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {Object} player - Player that triggered the collapse
@@ -27,12 +44,27 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
     return;
   }
 
+  // Validate game constants
+  if (!gameConstants || typeof gameConstants.COLLAPSE_DURATION !== 'number' || 
+      typeof gameConstants.GRAVITY_RANGE !== 'number' || 
+      typeof gameConstants.PLAYER_RADIUS !== 'number') {
+    console.warn('Invalid game constants for collapse effect');
+    return;
+  }
+
   const x = player.x - cameraX;
   const y = player.y - cameraY;
   
   // Calculate collapse animation progress (0 to 1)
-  const collapseElapsed = Date.now() - player.collapseStartTime;
-  const collapseProgress = Math.min(1, collapseElapsed / gameConstants.COLLAPSE_DURATION);
+  const now = Date.now();
+  if (!player.collapseStartTime || typeof player.collapseStartTime !== 'number') {
+    console.warn('Invalid collapse start time');
+    return;
+  }
+  
+  const collapseElapsed = now - player.collapseStartTime;
+  const collapseDuration = Math.max(100, gameConstants.COLLAPSE_DURATION); // Ensure non-zero duration
+  const collapseProgress = Math.min(1, Math.max(0, collapseElapsed / collapseDuration));
   
   try {
     ctx.save();
@@ -47,13 +79,15 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
       // First half: implode (shrink to center)
       const implodeProgress = collapseProgress * 2; // 0 to 1
       const easedImplode = easeInQuad(implodeProgress);
-      const implodeRadius = Math.max(0.001, gameConstants.GRAVITY_RANGE * (1 - easedImplode));
+      const GRAVITY_RANGE = Math.max(1, gameConstants.GRAVITY_RANGE);
+      const implodeRadius = Math.max(0.001, GRAVITY_RANGE * (1 - easedImplode));
       
       // Create an intense glow that grows as the implosion progresses
-      const glowRadius = Math.max(0.001, gameConstants.PLAYER_RADIUS * (1 + easedImplode * 3));
+      const PLAYER_RADIUS = Math.max(0.1, gameConstants.PLAYER_RADIUS);
+      const glowRadius = Math.max(0.001, PLAYER_RADIUS * (1 + easedImplode * 3));
       const innerGlowRadius = Math.max(0.001, glowRadius * 0.3);
       
-      const glowGradient = ctx.createRadialGradient(
+      const glowGradient = safeRadialGradient(
         x, y, innerGlowRadius,
         x, y, glowRadius
       );
@@ -110,14 +144,16 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
       // Second half: explode (expand from center)
       const explodeProgress = (collapseProgress - 0.5) * 2; // 0 to 1
       const easedExplode = easeOutQuad(explodeProgress);
-      const explodeRadius = Math.max(0.001, gameConstants.GRAVITY_RANGE * easedExplode * 2);
+      const GRAVITY_RANGE = Math.max(1, gameConstants.GRAVITY_RANGE);
+      const explodeRadius = Math.max(0.001, GRAVITY_RANGE * easedExplode * 2);
       
       // Central flash at the beginning of explosion
       if (explodeProgress < 0.3) {
         const flashOpacity = 0.9 * (1 - explodeProgress / 0.3);
-        const flashRadius = Math.max(0.001, gameConstants.PLAYER_RADIUS * 4 * (0.5 + explodeProgress * 2));
+        const PLAYER_RADIUS = Math.max(0.1, gameConstants.PLAYER_RADIUS);
+        const flashRadius = Math.max(0.001, PLAYER_RADIUS * 4 * (0.5 + explodeProgress * 2));
         
-        const flashGradient = ctx.createRadialGradient(
+        const flashGradient = safeRadialGradient(
           x, y, 0.001, // Ensure non-zero inner radius
           x, y, flashRadius
         );
@@ -192,7 +228,7 @@ export const renderCollapseEffect = (ctx, player, cameraX, cameraY, gameConstant
     
     ctx.restore();
   } catch (error) {
-    console.warn('Error rendering collapse effect:', error);
+    console.warn('Error rendering collapse effect:', error.message || error);
     // Simple fallback rendering
     ctx.save();
     ctx.beginPath();
