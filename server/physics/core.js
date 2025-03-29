@@ -7,14 +7,32 @@ class PhysicsCore {
     return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
   }
   
-  // Determine if a player is in a gravity well
+  // Calculate squared distance (faster when only comparing distances)
+  static distanceSquared(x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    return dx * dx + dy * dy;
+  }
+  
+  // Determine if a player is in a gravity well using squared distance
   static isInGravityWell(player1, player2) {
-    const dist = this.distance(player1.x, player1.y, player2.x, player2.y);
-    return dist <= GAME_CONSTANTS.GRAVITY_RANGE;
+    const distSquared = this.distanceSquared(player1.x, player1.y, player2.x, player2.y);
+    return distSquared <= GAME_CONSTANTS.GRAVITY_RANGE * GAME_CONSTANTS.GRAVITY_RANGE;
   }
   
   // Apply player movement based on input and velocity
   static applyMovement(room) {
+    // Object pool for reusable calculations
+    const playerCount = Object.keys(room.players).length;
+    
+    // Local constants for better performance
+    const arenaWidth = GAME_CONSTANTS.ARENA_WIDTH;
+    const arenaHeight = GAME_CONSTANTS.ARENA_HEIGHT;
+    const maxSpeed = GAME_CONSTANTS.MAX_SPEED;
+    
+    // Movement damping factor (precomputed)
+    const damping = 0.96;
+    
     for (const player of Object.values(room.players)) {
       // Apply player movement direction
       if (player.movementDirection.x !== 0 || player.movementDirection.y !== 0) {
@@ -23,25 +41,30 @@ class PhysicsCore {
       }
       
       // Apply damping to simulate friction
-      player.velocityX *= 0.96;
-      player.velocityY *= 0.96;
+      player.velocityX *= damping;
+      player.velocityY *= damping;
       
-      // Limit max speed
-      const speed = Math.sqrt(player.velocityX * player.velocityX + player.velocityY * player.velocityY);
-      if (speed > GAME_CONSTANTS.MAX_SPEED) {
-        player.velocityX = (player.velocityX / speed) * GAME_CONSTANTS.MAX_SPEED;
-        player.velocityY = (player.velocityY / speed) * GAME_CONSTANTS.MAX_SPEED;
+      // Limit max speed - check squared speed first (avoids sqrt calculation)
+      const speedSquared = player.velocityX * player.velocityX + player.velocityY * player.velocityY;
+      const maxSpeedSquared = maxSpeed * maxSpeed;
+      
+      if (speedSquared > maxSpeedSquared) {
+        // Only calculate sqrt when needed
+        const speed = Math.sqrt(speedSquared);
+        const speedFactor = maxSpeed / speed;
+        player.velocityX *= speedFactor;
+        player.velocityY *= speedFactor;
       }
       
       // Update position
       player.x += player.velocityX;
       player.y += player.velocityY;
       
-      // Wrap around edges
-      if (player.x < 0) player.x = GAME_CONSTANTS.ARENA_WIDTH;
-      if (player.x > GAME_CONSTANTS.ARENA_WIDTH) player.x = 0;
-      if (player.y < 0) player.y = GAME_CONSTANTS.ARENA_HEIGHT;
-      if (player.y > GAME_CONSTANTS.ARENA_HEIGHT) player.y = 0;
+      // Wrap around edges (modified for continuous movement)
+      if (player.x < 0) player.x += arenaWidth;
+      if (player.x > arenaWidth) player.x -= arenaWidth;
+      if (player.y < 0) player.y += arenaHeight;
+      if (player.y > arenaHeight) player.y -= arenaHeight;
     }
   }
 }
