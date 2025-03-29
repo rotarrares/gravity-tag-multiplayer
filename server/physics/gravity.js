@@ -7,7 +7,7 @@ class GravityPhysics {
   static calculatePlayerGravityStrength(player) {
     // Calculate how long the player has been standing still
     const stillTime = Date.now() - player.lastMoveTime;
-    const stillnessMultiplier = Math.min(3.5, 1 + stillTime / 1000);
+    const stillnessMultiplier = Math.min(4.5, 1 + stillTime / 800); // Increased max multiplier and faster buildup
     
     // Base gravity strength with stillness multiplier
     let gravityStrength = GAME_CONSTANTS.BASE_GRAVITY_STRENGTH * stillnessMultiplier;
@@ -27,12 +27,12 @@ class GravityPhysics {
       const collapseElapsed = Date.now() - player.collapseStartTime;
       if (collapseElapsed <= GAME_CONSTANTS.COLLAPSE_DURATION) {
         if (collapseElapsed < GAME_CONSTANTS.COLLAPSE_DURATION / 2) {
-          // First half: gravity decreases
-          gravityStrength *= (1 - collapseElapsed / (GAME_CONSTANTS.COLLAPSE_DURATION / 1.5));
+          // First half: gravity decreases more dramatically
+          gravityStrength *= (1 - collapseElapsed / (GAME_CONSTANTS.COLLAPSE_DURATION / 2.0));
         } else {
-          // Second half: gravity explodes
+          // Second half: gravity explodes with much more force
           const explosionPhase = (collapseElapsed - GAME_CONSTANTS.COLLAPSE_DURATION / 2) / (GAME_CONSTANTS.COLLAPSE_DURATION / 2);
-          gravityStrength *= GAME_CONSTANTS.COLLAPSE_STRENGTH_MULTIPLIER * explosionPhase * 1.5;
+          gravityStrength *= GAME_CONSTANTS.COLLAPSE_STRENGTH_MULTIPLIER * explosionPhase * 2.5; // Increased intensity
         }
       } else {
         player.isCollapsing = false;
@@ -44,17 +44,17 @@ class GravityPhysics {
   
   // Apply force between two objects
   static applyGravityForce(player, otherPlayer, dist, room) {
-    // Calculate gravity force - now with more extreme falloff for the larger range
-    // Use power 2.0 instead of 1.8 to reduce the effect of distant gravity
-    let force = otherPlayer.gravityStrength / Math.pow(dist, 2.0);
+    // Calculate gravity force - now with more extreme effect
+    // Use power 1.8 instead of 2.0 for stronger long-range gravitational pull
+    let force = otherPlayer.gravityStrength / Math.pow(dist, 1.8);
     
-    // Apply a smaller minimum force for the larger range
-    force = Math.max(force, 0.15); // Reduced from 0.25 for very distant players
+    // Apply a larger minimum force for stronger gravity wells
+    force = Math.max(force, 0.25); // Increased from 0.15 for stronger minimum effect
     
     // Apply distance attenuation - strongest at center, weaker at edges
-    // Modified for the much larger range - more gradual falloff
+    // Modified for more impactful gravity at range
     const distanceFactor = 1 - (dist / GAME_CONSTANTS.GRAVITY_RANGE);
-    force *= Math.pow(distanceFactor, 0.5); // Gentler falloff curve (0.5 instead of 0.7)
+    force *= Math.pow(distanceFactor, 0.4); // Gentler falloff curve (0.4 instead of 0.5)
     
     // Check if either player is in a nebula
     for (const hazard of room.hazards) {
@@ -96,8 +96,8 @@ class GravityPhysics {
           const dx = (otherPlayer.x - player.x) / dist;
           const dy = (otherPlayer.y - player.y) / dist;
           
-          // Apply force to velocity with reduced tick multiplier for larger range
-          const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 1000; // Further reduced from 900 to 1000
+          // Apply force to velocity with increased multiplier for stronger effects
+          const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 850; // Increased from 1000 to 850 for stronger effect
           player.velocityX += dx * force * tickMultiplier;
           player.velocityY += dy * force * tickMultiplier;
         }
