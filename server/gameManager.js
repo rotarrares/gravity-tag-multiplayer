@@ -56,7 +56,8 @@ class GameManager {
         x: player.x,
         y: player.y,
         isTagged: player.isTagged,
-        score: player.score
+        score: player.score,
+        username: player.username
       };
     }
   }
@@ -159,18 +160,40 @@ class GameManager {
     for (const [playerId, player] of Object.entries(room.players)) {
       const prevPlayer = previousState.players[playerId];
       
+      // Always include username for new players or if it's not in the previous state
+      if (!prevPlayer || !prevPlayer.username) {
+        delta.players[playerId] = {
+          x: player.x,
+          y: player.y,
+          isTagged: player.isTagged,
+          score: player.score,
+          username: player.username,
+          isPulsing: player.isPulsing,
+          isCollapsing: player.isCollapsing,
+          energy: player.energy
+        };
+        
+        // Update previous state
+        previousState.players[playerId] = {...delta.players[playerId]};
+      } 
       // Only include changed properties
-      if (!prevPlayer || 
-          prevPlayer.x !== player.x || 
+      else if (prevPlayer.x !== player.x || 
           prevPlayer.y !== player.y || 
           prevPlayer.isTagged !== player.isTagged ||
-          prevPlayer.score !== player.score) {
+          prevPlayer.score !== player.score ||
+          prevPlayer.isPulsing !== player.isPulsing ||
+          prevPlayer.isCollapsing !== player.isCollapsing ||
+          prevPlayer.energy !== player.energy) {
         
         delta.players[playerId] = {
           x: player.x,
           y: player.y,
           isTagged: player.isTagged,
-          score: player.score
+          score: player.score,
+          username: player.username,
+          isPulsing: player.isPulsing,
+          isCollapsing: player.isCollapsing,
+          energy: player.energy
         };
         
         // Update previous state
@@ -183,6 +206,18 @@ class GameManager {
     delta.hazards = room.hazards;
     
     return delta;
+  }
+  
+  // Generate full game state (no delta)
+  generateFullState(roomId) {
+    const room = this.rooms[roomId];
+    if (!room) return null;
+    
+    return {
+      players: room.players,
+      hazards: room.hazards,
+      timeRemaining: room.timeRemaining
+    };
   }
   
   // Main update loop for all game rooms
