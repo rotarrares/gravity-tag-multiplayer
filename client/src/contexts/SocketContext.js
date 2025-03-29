@@ -10,37 +10,42 @@ export const SocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Determine socket URL based on environment
-    const socketUrl = process.env.NODE_ENV === 'production' 
-      ? window.location.origin
-      : 'http://localhost:5000';
-    
-    // Initialize socket
-    const newSocket = io(socketUrl, {
-      transports: ['websocket'],
-      upgrade: false
+    // Initialize socket with better connection options
+    const newSocket = io(window.location.origin, {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      autoConnect: true,
+      forceNew: true
     });
+
+    console.log('Attempting to connect to server at:', window.location.origin);
 
     // Set up event listeners
     newSocket.on('connect', () => {
-      console.log('Connected to server');
+      console.log('Successfully connected to server with ID:', newSocket.id);
       setIsConnected(true);
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('Disconnected from server');
+    newSocket.on('disconnect', (reason) => {
+      console.log('Disconnected from server. Reason:', reason);
       setIsConnected(false);
     });
 
     newSocket.on('connect_error', (error) => {
-      console.error('Connection error:', error);
+      console.error('Connection error:', error.message);
       setIsConnected(false);
+    });
+
+    newSocket.on('error', (error) => {
+      console.error('Socket error:', error);
     });
 
     setSocket(newSocket);
 
     // Cleanup on unmount
     return () => {
+      console.log('Cleaning up socket connection');
       newSocket.disconnect();
     };
   }, []);
