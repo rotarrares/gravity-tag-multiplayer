@@ -24,11 +24,12 @@ app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// Set up Socket.IO
+// Set up Socket.IO with more permissive CORS in development
 const io = new Server(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' ? false : ['http://localhost:3000'],
-    methods: ['GET', 'POST']
+    origin: '*',
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
@@ -139,14 +140,25 @@ io.on('connection', (socket) => {
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
   // Set static folder
-  app.use(express.static(path.join(__dirname, '../client/build')));
+  const clientBuildPath = path.join(__dirname, '../client/build');
+  
+  console.log(`Serving static files from: ${clientBuildPath}`);
+  
+  app.use(express.static(clientBuildPath));
   
   app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../client/build', 'index.html'));
+    res.sendFile(path.resolve(clientBuildPath, 'index.html'));
   });
 }
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send('Something broke!');
+});
 
 // Start server
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
 });
