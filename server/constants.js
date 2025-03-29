@@ -10,6 +10,7 @@ const GAME_CONSTANTS = {
   MAX_SPEED: 5,
   BASE_GRAVITY_STRENGTH: 800, // Increased from 300 to 800
   GRAVITY_RANGE: 1800, // Tripled from 600 to 1800 for much wider area of effect
+  GRAVITY_PROXIMITY_THRESHOLD: 60, // New constant - distance below which gravity is nullified
   PULSE_STRENGTH_MULTIPLIER: 12, // Increased from 8 to 12
   PULSE_DURATION: 1000, // ms
   PULSE_COOLDOWN: 10000, // ms
