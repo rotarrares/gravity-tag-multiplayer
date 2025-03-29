@@ -106,6 +106,26 @@ io.on('connection', (socket) => {
     }
   });
   
+  // Handle direct request for game constants
+  socket.on('requestGameConstants', ({ roomId }) => {
+    console.log(`Player ${socket.id} requesting game constants for room: ${roomId}`);
+    
+    if (roomId && gameManager.rooms[roomId]) {
+      console.log('Sending game constants directly');
+      socket.emit('gameConstants', GAME_CONSTANTS);
+      
+      // Re-send the roomJoined event as a backup
+      socket.emit('roomJoined', { 
+        roomId: roomId,
+        playerId: socket.id,
+        gameConstants: GAME_CONSTANTS
+      });
+    } else {
+      console.log('Room not found, sending only game constants');
+      socket.emit('gameConstants', GAME_CONSTANTS);
+    }
+  });
+  
   // Player movement
   socket.on('playerMove', (moveData) => {
     const { roomId, direction } = moveData;
@@ -138,7 +158,7 @@ io.on('connection', (socket) => {
     
     // Remove player from all rooms they were in
     Object.keys(gameManager.rooms).forEach(roomId => {
-      if (gameManager.rooms[roomId].players[socket.id]) {
+      if (gameManager.rooms[roomId]?.players?.[socket.id]) {
         gameManager.removePlayerFromRoom(roomId, socket.id);
         
         // Notify room of player leaving
