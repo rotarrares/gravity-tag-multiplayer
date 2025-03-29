@@ -29,6 +29,7 @@ const GAME_CONSTANTS = {
   TAG_INVULNERABILITY: 2000, // ms
   TAG_POINTS: 1,
   TAGGED_POINTS_LOST: 1,
+  TAG_DURATION: 8000, // Time in ms that a player remains tagged before automatically becoming untagged
   
   // Hazards
   BLACK_HOLE_RADIUS: 50,
