@@ -164,6 +164,66 @@ class GameManager {
     }
   }
   
+  // Check and handle tag duration expiration
+  checkTagDuration(room) {
+    const now = Date.now();
+    const players = Object.values(room.players);
+    let anyTagExpired = false;
+    
+    for (const player of players) {
+      if (player.isTagged) {
+        // Check if the tag duration has expired
+        const tagElapsed = now - player.lastTaggedTime;
+        if (tagElapsed >= GAME_CONSTANTS.TAG_DURATION) {
+          // Untag the player
+          player.isTagged = false;
+          console.log(`Tag expired for player ${player.username || player.id} after ${GAME_CONSTANTS.TAG_DURATION / 1000} seconds`);
+          
+          // Emit an event to notify clients
+          if (room.emitEvent) {
+            room.emitEvent('playerUntagged', {
+              playerId: player.id,
+              reason: 'duration',
+              timestamp: now
+            });
+          }
+          
+          anyTagExpired = true;
+        }
+      }
+    }
+    
+    // If any tags expired, check if we need to randomly tag someone else
+    if (anyTagExpired) {
+      this.checkAndAssignRandomTag(room, now);
+    }
+  }
+  
+  // Check if we need to randomly tag someone and do so if needed
+  checkAndAssignRandomTag(room, now) {
+    const players = Object.values(room.players);
+    const anyoneTagged = players.some(p => p.isTagged);
+    
+    if (players.length >= 2 && !anyoneTagged) {
+      // No one is tagged - randomly tag someone
+      const randomPlayer = players[Math.floor(Math.random() * players.length)];
+      randomPlayer.isTagged = true;
+      randomPlayer.lastTaggedTime = now;
+      
+      console.log(`Randomly tagged player ${randomPlayer.username || randomPlayer.id} after all tags expired`);
+      
+      // Notify room of new tag
+      if (room.emitEvent) {
+        room.emitEvent('playerTagged', {
+          taggedId: randomPlayer.id,
+          taggerId: null, // No tagger for random assignment
+          reason: 'random',
+          timestamp: now
+        });
+      }
+    }
+  }
+  
   // Generate delta state for efficient network updates
   generateDeltaState(roomId) {
     const room = this.rooms[roomId];
@@ -194,7 +254,8 @@ class GameManager {
         energy: player.energy,
         // Always include timer information to display cooldowns
         lastPulseTime: player.lastPulseTime,
-        lastCollapseTime: player.lastCollapseTime
+        lastCollapseTime: player.lastCollapseTime,
+        lastTaggedTime: player.lastTaggedTime // Include tag time for client-side timer
       };
       
       // Special handling for animation states
@@ -213,7 +274,8 @@ class GameManager {
             prevPlayer.score !== player.score ||
             prevPlayer.energy !== player.energy ||
             prevPlayer.lastPulseTime !== player.lastPulseTime ||
-            prevPlayer.lastCollapseTime !== player.lastCollapseTime) {
+            prevPlayer.lastCollapseTime !== player.lastCollapseTime ||
+            prevPlayer.lastTaggedTime !== player.lastTaggedTime) {
           hasChanges = true;
         }
         
@@ -249,7 +311,8 @@ class GameManager {
           lastPulseTime: player.lastPulseTime,
           lastCollapseTime: player.lastCollapseTime,
           pulseStartTime: player.pulseStartTime,
-          collapseStartTime: player.collapseStartTime
+          collapseStartTime: player.collapseStartTime,
+          lastTaggedTime: player.lastTaggedTime
         };
       }
     }
@@ -288,7 +351,8 @@ class GameManager {
         lastPulseTime: player.lastPulseTime,
         lastCollapseTime: player.lastCollapseTime,
         pulseStartTime: player.pulseStartTime,
-        collapseStartTime: player.collapseStartTime
+        collapseStartTime: player.collapseStartTime,
+        lastTaggedTime: player.lastTaggedTime
       };
     }
     
@@ -327,6 +391,9 @@ class GameManager {
       Physics.handleTagging(room);
       this.regenerateEnergy(room);
       
+      // Check if any tags have expired after their duration
+      this.checkTagDuration(room);
+      
       // Stronger gravity during storm for more dramatic effects
       if (inGravityStorm) {
         for (const player of Object.values(room.players)) {
@@ -359,25 +426,7 @@ class GameManager {
       }
       
       // Check if we need to randomly tag someone (if no one is tagged)
-      const players = Object.values(room.players);
-      const anyoneTagged = players.some(p => p.isTagged);
-      
-      if (players.length >= 2 && !anyoneTagged) {
-        // No one is tagged - randomly tag someone
-        const randomPlayer = players[Math.floor(Math.random() * players.length)];
-        randomPlayer.isTagged = true;
-        randomPlayer.lastTaggedTime = now;
-        
-        console.log(`Randomly tagged player ${randomPlayer.username || randomPlayer.id} to continue the game`);
-        
-        // Notify room of new tag
-        if (room.emitEvent) {
-          room.emitEvent('playerTagged', {
-            taggedId: randomPlayer.id,
-            timestamp: now
-          });
-        }
-      }
+      this.checkAndAssignRandomTag(room, now);
     });
   }
   
@@ -429,6 +478,8 @@ class GameManager {
       if (room.emitEvent) {
         room.emitEvent('playerTagged', {
           taggedId: randomPlayer.id,
+          taggerId: null, // No tagger for random assignment
+          reason: 'round_start',
           timestamp: now
         });
       }
