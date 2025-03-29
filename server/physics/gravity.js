@@ -44,15 +44,17 @@ class GravityPhysics {
   
   // Apply force between two objects
   static applyGravityForce(player, otherPlayer, dist, room) {
-    // Calculate gravity force - now with cubic falloff
-    let force = otherPlayer.gravityStrength / Math.pow(dist, 1.8);
+    // Calculate gravity force - now with more extreme falloff for the larger range
+    // Use power 2.0 instead of 1.8 to reduce the effect of distant gravity
+    let force = otherPlayer.gravityStrength / Math.pow(dist, 2.0);
     
-    // Apply a minimum force 
-    force = Math.max(force, 0.25);
+    // Apply a smaller minimum force for the larger range
+    force = Math.max(force, 0.15); // Reduced from 0.25 for very distant players
     
     // Apply distance attenuation - strongest at center, weaker at edges
+    // Modified for the much larger range - more gradual falloff
     const distanceFactor = 1 - (dist / GAME_CONSTANTS.GRAVITY_RANGE);
-    force *= Math.pow(distanceFactor, 0.7); // Gentle falloff curve
+    force *= Math.pow(distanceFactor, 0.5); // Gentler falloff curve (0.5 instead of 0.7)
     
     // Check if either player is in a nebula
     for (const hazard of room.hazards) {
@@ -94,8 +96,8 @@ class GravityPhysics {
           const dx = (otherPlayer.x - player.x) / dist;
           const dy = (otherPlayer.y - player.y) / dist;
           
-          // Apply force to velocity
-          const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 900;
+          // Apply force to velocity with reduced tick multiplier for larger range
+          const tickMultiplier = GAME_CONSTANTS.TICK_RATE / 1000; // Further reduced from 900 to 1000
           player.velocityX += dx * force * tickMultiplier;
           player.velocityY += dy * force * tickMultiplier;
         }
