@@ -24,6 +24,19 @@ class GameManager {
     this.rooms[roomId].hazards.push(createBlackHole());
     this.rooms[roomId].hazards.push(createNebula());
     this.rooms[roomId].hazards.push(createNebula());
+    
+    // Initialize direction for hazards
+    for (const hazard of this.rooms[roomId].hazards) {
+      if (hazard.type === 'blackHole' || hazard.type === 'nebula') {
+        hazard.directionX = Math.random() * 2 - 1;
+        hazard.directionY = Math.random() * 2 - 1;
+        
+        // Normalize direction vector
+        const magnitude = Math.sqrt(hazard.directionX * hazard.directionX + hazard.directionY * hazard.directionY);
+        hazard.directionX /= magnitude;
+        hazard.directionY /= magnitude;
+      }
+    }
   }
   
   // Add player to a room
@@ -126,6 +139,7 @@ class GameManager {
       Physics.applyMovement(room);
       Physics.applyGravity(room);
       Physics.applyBlackHoles(room);
+      Physics.moveHazards(room); // Add the call to move hazards
       
       // Update hazards
       HazardManager.updateComets(room);
@@ -137,7 +151,7 @@ class GameManager {
       // Stronger gravity during storm for more dramatic effects
       if (inGravityStorm) {
         for (const player of Object.values(room.players)) {
-          player.gravityStrength *= 3;
+          player.gravityStrength *= 4; // Increased from 3 to 4 for more dramatic storm effect
         }
       }
       
@@ -163,6 +177,19 @@ class GameManager {
     room.hazards.push(createBlackHole());
     room.hazards.push(createNebula());
     room.hazards.push(createNebula());
+    
+    // Initialize direction for hazards
+    for (const hazard of room.hazards) {
+      if (hazard.type === 'blackHole' || hazard.type === 'nebula') {
+        hazard.directionX = Math.random() * 2 - 1;
+        hazard.directionY = Math.random() * 2 - 1;
+        
+        // Normalize direction vector
+        const magnitude = Math.sqrt(hazard.directionX * hazard.directionX + hazard.directionY * hazard.directionY);
+        hazard.directionX /= magnitude;
+        hazard.directionY /= magnitude;
+      }
+    }
     
     // Reset player positions and tagged status
     for (const player of Object.values(room.players)) {
